@@ -1,4 +1,4 @@
-const CACHE_NAME = "roadlink-trip-control-v3";
+const CACHE_NAME = "roadlink-trip-control-v4";
 
 const STATIC_ASSETS = [
   "./",
