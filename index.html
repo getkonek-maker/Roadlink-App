@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Roadlink Trip Control</title>
+    <meta name="theme-color" content="#101a68">
+    <meta name="description" content="Roadlink staff portal for trips, waybills, approvals, cancellations, and reconciliation.">
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="icon" href="assets/pwa-icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="assets/pwa-icon-192.png">
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <main class="shell">
+      <section class="device-panel" aria-label="Device preview">
+        <div class="device-toolbar" aria-label="Preview options">
+          <button class="device-choice is-active" type="button" data-device="ios">iPhone</button>
+          <button class="device-choice" type="button" data-device="android">Android</button>
+        </div>
+
+        <div class="phone-frame ios" id="phoneFrame">
+          <div class="phone-status">
+            <span id="statusTime">9:41</span>
+            <span>Roadlink LTE</span>
+          </div>
+
+          <div class="app" id="app" aria-live="polite"></div>
+        </div>
+      </section>
+
+      <aside class="demo-notes" aria-label="Prototype notes">
+        <div>
+          <img class="brand-logo large" src="assets/roadlink-logo.svg" alt="Roadlink Cargo Transport Service">
+          <p class="eyebrow">Roadlink Demo</p>
+          <h1>Trip status, cancellation proof, and fund accountability in one phone flow.</h1>
+          <p>
+            Staff use the app. Clients only receive a secure link through their preferred channel.
+          </p>
+        </div>
+
+        <div class="note-grid">
+          <article>
+            <strong>Client friction stays low</strong>
+            <span>No account, no install, no client dashboard.</span>
+          </article>
+          <article>
+            <strong>Funded cancellations stand out</strong>
+            <span>Owner and accounting see the risk immediately.</span>
+          </article>
+          <article>
+            <strong>Every action leaves a trail</strong>
+            <span>Status changes, releases, and reconciliation are visible.</span>
+          </article>
+        </div>
+      </aside>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>

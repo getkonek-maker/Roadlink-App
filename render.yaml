@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: roadlink-trip-control
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm run start
+    healthCheckPath: /api/health
+    envVars:
+      - key: RESEND_API_KEY
+        sync: false
+      - key: ROADLINK_EMAIL_FROM
+        value: Roadlink Trip Control <onboarding@resend.dev>

@@ -1,0 +1,14 @@
+{
+  "name": "roadlink-trip-control",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Phone-first Roadlink trip control demo for booking confirmation, cancellation alerts, and fund reconciliation.",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node server.mjs",
+    "start:static": "python3 -m http.server 4173",
+    "check": "node --check app.js && node --check server.mjs"
+  }
+}

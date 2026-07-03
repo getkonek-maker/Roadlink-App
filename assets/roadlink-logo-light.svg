@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 118" role="img" aria-labelledby="title desc">
+  <title id="title">Roadlink Cargo Transport Service</title>
+  <desc id="desc">Roadlink wordmark with red and white transport speed lines for dark backgrounds.</desc>
+  <defs>
+    <linearGradient id="metalLight" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="0.48" stop-color="#c9d1dc"/>
+      <stop offset="1" stop-color="#ffffff"/>
+    </linearGradient>
+    <filter id="darkShadow" x="-10%" y="-20%" width="120%" height="150%">
+      <feDropShadow dx="1.5" dy="2" stdDeviation="1.2" flood-color="#050816" flood-opacity="0.52"/>
+    </filter>
+  </defs>
+  <g transform="translate(0 8)" filter="url(#darkShadow)">
+    <text x="0" y="52" fill="url(#metalLight)" stroke="#ffffff" stroke-width="1.2" paint-order="stroke fill" font-family="Arial Black, Arial, Helvetica, sans-serif" font-size="57" font-style="italic" letter-spacing="-3">Roadlink</text>
+  </g>
+  <text x="384" y="52" fill="#ffffff" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="800" letter-spacing="0.4">CARGO TRANSPORT SERVICE</text>
+  <path d="M4 66 L602 66 L549 87 L4 76 Z" fill="#ffffff" opacity="0.95"/>
+  <path d="M4 60 L581 60 L532 74 L4 68 Z" fill="#e01f26"/>
+  <text x="6" y="110" fill="#ffffff" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="800">We Go Wherever Roads Go !</text>
+</svg>

@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 420" role="img" aria-labelledby="title desc">
+  <title id="title">Roadlink 10-wheeler and wing van</title>
+  <desc id="desc">A clean transport illustration showing Roadlink cargo vehicles on the road.</desc>
+  <defs>
+    <linearGradient id="sky" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0" stop-color="#f8faff"/>
+      <stop offset="1" stop-color="#e7edff"/>
+    </linearGradient>
+    <linearGradient id="blueTruck" x1="0" x2="1" y1="0" y2="0">
+      <stop offset="0" stop-color="#101a68"/>
+      <stop offset="1" stop-color="#1428d4"/>
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="140%">
+      <feDropShadow dx="0" dy="14" stdDeviation="14" flood-color="#0f172a" flood-opacity="0.2"/>
+    </filter>
+  </defs>
+
+  <rect width="720" height="420" rx="34" fill="url(#sky)"/>
+  <path d="M0 330 C120 292 210 344 334 316 C470 286 565 308 720 268 L720 420 L0 420 Z" fill="#dfe7ff"/>
+  <path d="M60 340 L660 340" stroke="#ffffff" stroke-width="10" stroke-linecap="round"/>
+  <path d="M110 340 L186 340 M268 340 L344 340 M426 340 L502 340 M584 340 L640 340" stroke="#9aa7d9" stroke-width="4" stroke-linecap="round"/>
+
+  <g filter="url(#shadow)">
+    <g transform="translate(82 172)">
+      <rect x="42" y="50" width="252" height="72" rx="10" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
+      <rect x="58" y="66" width="220" height="10" rx="2" fill="#1428d4"/>
+      <rect x="58" y="82" width="182" height="6" rx="2" fill="#e01f26"/>
+      <path d="M294 72 L350 80 L374 122 L294 122 Z" fill="url(#blueTruck)"/>
+      <rect x="314" y="87" width="32" height="20" rx="3" fill="#dbeafe"/>
+      <rect x="20" y="118" width="372" height="16" rx="6" fill="#111827"/>
+      <circle cx="86" cy="138" r="24" fill="#111827"/>
+      <circle cx="86" cy="138" r="10" fill="#e5e7eb"/>
+      <circle cx="304" cy="138" r="24" fill="#111827"/>
+      <circle cx="304" cy="138" r="10" fill="#e5e7eb"/>
+      <text x="72" y="110" fill="#111827" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="800">10 WHEELER</text>
+    </g>
+
+    <g transform="translate(312 70)">
+      <rect x="20" y="78" width="276" height="82" rx="10" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
+      <path d="M20 98 L296 98 L268 118 L20 112 Z" fill="#1428d4"/>
+      <path d="M20 90 L280 90 L254 104 L20 98 Z" fill="#e01f26"/>
+      <path d="M296 108 L356 116 L382 160 L296 160 Z" fill="#101a68"/>
+      <rect x="318" y="125" width="34" height="20" rx="3" fill="#dbeafe"/>
+      <rect x="8" y="156" width="392" height="16" rx="6" fill="#111827"/>
+      <circle cx="78" cy="176" r="24" fill="#111827"/>
+      <circle cx="78" cy="176" r="10" fill="#e5e7eb"/>
+      <circle cx="256" cy="176" r="24" fill="#111827"/>
+      <circle cx="256" cy="176" r="10" fill="#e5e7eb"/>
+      <circle cx="338" cy="176" r="24" fill="#111827"/>
+      <circle cx="338" cy="176" r="10" fill="#e5e7eb"/>
+      <text x="46" y="145" fill="#111827" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="800">WING VAN</text>
+    </g>
+  </g>
+</svg>
