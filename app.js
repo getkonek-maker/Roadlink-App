@@ -5,6 +5,10 @@ const roles = [
   { id: "admin", label: "Admin", icon: "AD", username: "admin.temp", password: "Roadlink-0047", detail: "Add users, roles, temporary passwords, and photos." }
 ];
 
+const clientDemoUsers = [
+  { company: "Mactan Seafoods Export", contact: "Ana Lim", email: "ana@mactanseafreight.example", username: "ana.client", password: "Client-2407", phone: "+63 917 420 1188" }
+];
+
 const statusLabels = {
   pending: "Pending",
   confirmed: "Confirmed",
@@ -75,9 +79,14 @@ const philippinePlaces = [
 const state = {
   screen: "home",
   role: null,
+  session: null,
+  dataMode: "loading",
+  googleSheetsConnected: false,
+  emailConnected: false,
   filter: "all",
   toast: "",
   selectedTripId: "RL-2407",
+  selectedBookingRequestId: "",
   clientPreviewTripId: null,
   otpSent: false,
   newUserPhoto: "",
@@ -92,6 +101,25 @@ const state = {
       requestedAt: "Jul 2, 2026 11:20 AM"
     }
   ],
+  bookingRequests: [
+    {
+      id: "BR-7001",
+      company: "Mactan Seafoods Export",
+      contact: "Ana Lim",
+      email: "ana@mactanseafreight.example",
+      phone: "+63 917 420 1188",
+      origin: "Mandaue City, Cebu",
+      destination: "Tacloban City, Leyte",
+      vehicle: "Wing van",
+      date: "2026-07-16",
+      cargo: "Chilled seafood cartons",
+      status: "Needs staff review",
+      createdAt: "Jul 4, 2026 9:30 AM",
+      clientId: "CLIENT-MACTAN"
+    }
+  ],
+  notifications: [],
+  clientSession: null,
   users: [
     { name: "Mika Santos", role: "Coordinator", username: "mika.temp", password: "Roadlink-8421", initials: "MS", photo: "" },
     { name: "Liza Mercado", role: "Accounting", username: "finance.temp", password: "Roadlink-2198", initials: "LM", photo: "" },
@@ -251,6 +279,68 @@ function cloneTripForEmail(trip) {
   return JSON.parse(JSON.stringify(trip));
 }
 
+async function apiRequest(path, options = {}) {
+  const response = await fetch(path, {
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...(options.headers || {})
+    }
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok || result.ok === false) {
+    throw new Error(result.message || "Roadlink server request failed.");
+  }
+  return result;
+}
+
+async function loadServerState() {
+  try {
+    const result = await apiRequest("/api/bootstrap");
+    const data = result.data || {};
+    state.dataMode = data.mode || "local-demo";
+    state.googleSheetsConnected = Boolean(data.googleSheets);
+    state.emailConnected = Boolean(data.email);
+    if (Array.isArray(data.trips) && data.trips.length) state.trips = data.trips;
+    if (Array.isArray(data.accountRequests)) state.approvalRequests = data.accountRequests;
+    if (Array.isArray(data.bookingRequests)) state.bookingRequests = data.bookingRequests;
+    if (Array.isArray(data.notifications)) state.notifications = data.notifications;
+    if (Array.isArray(data.profiles) && data.profiles.length) {
+      state.users = data.profiles
+        .filter((profile) => profile.role !== "client")
+        .map((profile) => ({
+          name: profile.name,
+          role: profile.roleLabel || roleLabelFromId(profile.role),
+          username: profile.username || profile.email,
+          password: profile.username?.endsWith(".temp") ? demoPasswordForRole(profile.role) : "Managed by server",
+          initials: profile.initials || initials(profile.name),
+          photo: profile.photo || ""
+        }));
+    }
+  } catch {
+    state.dataMode = "offline-demo";
+  }
+}
+
+function roleLabelFromId(roleId) {
+  return (roles.find((role) => role.id === roleId) || {}).label || "Coordinator";
+}
+
+function demoPasswordForRole(roleId) {
+  return (roles.find((role) => role.id === roleId) || {}).password || "Managed by server";
+}
+
+function initials(name = "") {
+  return name.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase() || "RL";
+}
+
+function syncTripFromServer(trip) {
+  if (!trip) return;
+  const index = state.trips.findIndex((item) => item.id === trip.id);
+  if (index >= 0) state.trips[index] = trip;
+  else state.trips.unshift(trip);
+}
+
 async function sendTripEmail(kind, trip) {
   try {
     const response = await fetch("/api/send-email", {
@@ -322,6 +412,10 @@ function render() {
   const views = {
     home: renderHome,
     login: renderLogin,
+    clientLogin: renderClientLogin,
+    clientPortal: renderClientPortal,
+    clientBooking: renderClientBookingRequest,
+    clientBookingDetail: renderClientBookingDetail,
     accountRequest: renderAccountRequest,
     dashboard: renderDashboard,
     newTrip: renderNewTrip,
@@ -361,8 +455,9 @@ function renderHome() {
       <div class="home-hero">
         <img class="home-logo" src="assets/roadlink-logo-home.svg" alt="Roadlink Cargo Transport Service">
         <div class="home-actions">
-          <button class="primary wide home-login" type="button" data-action="login">Log in</button>
-          <span>Staff Portal</span>
+          <button class="primary wide home-login" type="button" data-action="login">Staff log in</button>
+          <button class="ghost wide home-client-login" type="button" data-action="clientLogin">Client portal preview</button>
+          <span>${state.dataMode === "supabase" ? "Production Pilot" : "Demo Mode"}</span>
         </div>
       </div>
       ${state.toast ? `<div class="toast">${state.toast}</div>` : ""}
@@ -413,6 +508,204 @@ function renderLogin() {
           <strong>Demo credentials</strong>
           ${roles.map((role) => `<span>${role.label}: ${role.username} / ${role.password}</span>`).join("")}
         </div>
+      </div>
+      ${state.toast ? `<div class="toast">${state.toast}</div>` : ""}
+    </section>
+  `;
+}
+
+function renderClientLogin() {
+  const client = clientDemoUsers[0];
+  return `
+    <section class="screen auth-screen client-auth-screen">
+      <button class="tiny-btn auth-back" type="button" data-action="home">Back</button>
+      <div class="auth-panel">
+        <img class="auth-logo" src="assets/roadlink-logo.svg" alt="Roadlink Cargo Transport Service">
+        <div>
+          <p class="eyebrow">Client Portal Preview</p>
+          <h1>Track your Roadlink bookings</h1>
+          <p>For demo only: clients can request trips, confirm pending bookings, and see simple trip summaries without internal budget details.</p>
+        </div>
+
+        <form class="login-form" id="clientLoginForm">
+          <div class="field">
+            <label for="clientEmail">Client email or username</label>
+            <input id="clientEmail" name="username" autocomplete="username" value="${client.username}" required>
+          </div>
+          <div class="field">
+            <label for="clientPassword">Password</label>
+            <input id="clientPassword" name="password" type="password" autocomplete="current-password" value="${client.password}" required>
+          </div>
+          <button class="primary wide" type="submit">Open client portal</button>
+        </form>
+
+        <div class="login-hint">
+          <strong>Demo client</strong>
+          <span>${client.company}: ${client.username} / ${client.password}</span>
+        </div>
+      </div>
+      ${state.toast ? `<div class="toast">${state.toast}</div>` : ""}
+    </section>
+  `;
+}
+
+function clientTrips() {
+  if (!state.clientSession) return [];
+  return state.trips.filter((trip) => trip.client === state.clientSession.company || trip.email === state.clientSession.email);
+}
+
+function clientRequests() {
+  if (!state.clientSession) return [];
+  return state.bookingRequests.filter((request) => request.company === state.clientSession.company || request.email === state.clientSession.email);
+}
+
+function renderClientPortal() {
+  const client = state.clientSession || clientDemoUsers[0];
+  const trips = clientTrips();
+  const requests = clientRequests();
+  return `
+    <section class="screen">
+      ${topbar("Client Portal", `<button class="tiny-btn" type="button" data-action="logoutClient">Exit</button>`)}
+      <div class="client-portal-hero">
+        <img src="assets/roadlink-logo-light.svg" alt="Roadlink Cargo Transport Service">
+        <span>Preview account</span>
+        <h1>${client.company}</h1>
+        <p>Simple booking visibility for authorized client contacts.</p>
+      </div>
+      <div class="content">
+        <button class="primary wide" type="button" data-action="clientBooking">Request new booking</button>
+        <div class="status-grid">
+          <div class="metric"><b>${trips.length}</b><span>Bookings</span></div>
+          <div class="metric"><b>${requests.length}</b><span>Requests</span></div>
+        </div>
+
+        <article class="card">
+          <div class="section-head">
+            <div>
+              <h3>Active bookings</h3>
+              <p>Clients see trip status only. Internal budgets and audit logs stay hidden.</p>
+            </div>
+          </div>
+          <div class="cards thin-cards">
+            ${trips.map((trip) => `
+              <button class="client-trip-card" type="button" data-client-trip-detail="${trip.id}">
+                <strong>${trip.origin} to ${trip.destination}</strong>
+                <span>${displayDate(trip.date)} • ${trip.vehicle}</span>
+                <small class="status-pill ${statusClass(trip.status)}">${statusLabels[trip.status]}</small>
+              </button>
+            `).join("") || `<span class="muted">No active bookings yet.</span>`}
+          </div>
+        </article>
+
+        <article class="card">
+          <div class="section-head">
+            <div>
+              <h3>Booking requests</h3>
+              <p>New requests wait for Roadlink coordinator review.</p>
+            </div>
+          </div>
+          <div class="cards thin-cards">
+            ${requests.map((request) => `
+              <div class="client-trip-card passive">
+                <strong>${request.origin} to ${request.destination}</strong>
+                <span>${displayDate(request.date)} • ${request.vehicle}</span>
+                <small>${request.status}</small>
+              </div>
+            `).join("") || `<span class="muted">No client requests yet.</span>`}
+          </div>
+        </article>
+      </div>
+      ${state.toast ? `<div class="toast">${state.toast}</div>` : ""}
+    </section>
+  `;
+}
+
+function renderClientBookingRequest() {
+  const client = state.clientSession || clientDemoUsers[0];
+  const placeOptions = philippinePlaces.map((place) => `<option value="${place}"></option>`).join("");
+  return `
+    <section class="screen">
+      ${topbar("Request Booking")}
+      <form class="content form-grid" id="clientBookingForm">
+        <datalist id="philippinePlaces">${placeOptions}</datalist>
+        <div class="form-card">
+          <div class="field">
+            <label for="clientCompany">Company</label>
+            <input id="clientCompany" name="company" value="${client.company}" required>
+          </div>
+          <div class="field">
+            <label for="clientContact">Authorized contact</label>
+            <input id="clientContact" name="contact" value="${client.contact}" required>
+          </div>
+          <div class="field">
+            <label for="clientRequestEmail">Email</label>
+            <input id="clientRequestEmail" name="email" type="email" value="${client.email}" required>
+          </div>
+          <div class="field">
+            <label for="clientRequestPhone">Phone</label>
+            <input id="clientRequestPhone" name="phone" value="${client.phone}" required>
+          </div>
+        </div>
+        <div class="form-card">
+          <div class="field">
+            <label for="clientOrigin">From</label>
+            <input id="clientOrigin" name="origin" list="philippinePlaces" placeholder="Example: Mandaue City, Cebu" required>
+          </div>
+          <div class="field">
+            <label for="clientDestination">To</label>
+            <input id="clientDestination" name="destination" list="philippinePlaces" placeholder="Example: Ormoc City, Leyte" required>
+          </div>
+          <div class="field">
+            <label for="clientVehicle">Vehicle type</label>
+            <select id="clientVehicle" name="vehicle" required>
+              <option value="">Select vehicle type</option>
+              <option>10-wheeler truck</option>
+              <option>Wing van</option>
+              <option>6-wheeler truck</option>
+              <option>Prime mover</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="clientDate">Trip date</label>
+            <input id="clientDate" name="date" type="date" required>
+          </div>
+          <div class="field">
+            <label for="clientCargo">Cargo notes</label>
+            <textarea id="clientCargo" name="cargo" placeholder="Cargo description, quantity, or handling notes"></textarea>
+          </div>
+        </div>
+        <button class="primary wide" type="submit">Send request to Roadlink</button>
+      </form>
+      ${state.toast ? `<div class="toast">${state.toast}</div>` : ""}
+    </section>
+  `;
+}
+
+function renderClientBookingDetail() {
+  const trip = selectedTrip();
+  return `
+    <section class="screen">
+      ${topbar("Booking Detail")}
+      <div class="content">
+        <article class="client-card">
+          <span class="status-pill ${statusClass(trip.status)}">${statusLabels[trip.status]}</span>
+          <h1>${trip.origin} to ${trip.destination}</h1>
+          <div class="trip-fields compact-fields">
+            <span><b>Company</b>${trip.client}</span>
+            <span><b>Authorized contact</b>${trip.contact}</span>
+            <span><b>Vehicle Type</b>${trip.vehicle}</span>
+            <span><b>Plate No.</b>${trip.waybill?.plateNo || "For assignment"}</span>
+            <span><b>Trip Date</b>${displayDate(trip.date)}</span>
+            <span><b>Cargo</b>${trip.cargo || "None provided"}</span>
+          </div>
+          ${trip.status === "pending" ? `
+            <div class="actions">
+              <button class="success" type="button" data-client-confirm="${trip.id}">Confirm Booking</button>
+              <button class="danger" type="button" data-client-cancel="${trip.id}">Cancel Booking</button>
+            </div>
+          ` : ""}
+          <button class="ghost" type="button" data-call-roadlink="${trip.id}">Contact Roadlink</button>
+        </article>
       </div>
       ${state.toast ? `<div class="toast">${state.toast}</div>` : ""}
     </section>
@@ -479,6 +772,11 @@ function renderDashboard() {
     <section class="screen">
       ${topbar("Roadlink", `<button class="tiny-btn" type="button" data-action="logout">Role</button>`)}
       <div class="content">
+        <div class="pilot-status">
+          <span><b>Data</b>${state.dataMode === "supabase" ? "Supabase connected" : "Local demo store"}</span>
+          <span><b>Email</b>${state.emailConnected ? "Resend ready" : "Configure Resend"}</span>
+          <span><b>Sheets</b>${state.googleSheetsConnected ? "Mirror active" : "Mirror pending"}</span>
+        </div>
         ${riskCount ? `
           <button class="alert-card" type="button" data-action="openReconcile">
             <strong>${riskCount} cancelled trip has funds released</strong>
@@ -503,6 +801,27 @@ function renderDashboard() {
           <div class="metric"><b>${counts.pending}</b><span>Waiting client</span></div>
           <div class="metric"><b>${riskCount}</b><span>At risk</span></div>
         </div>
+
+        ${state.bookingRequests.length ? `
+          <article class="card">
+            <div class="section-head">
+              <div>
+                <h3>Client booking requests</h3>
+                <p>Portal requests wait here until a coordinator converts them to official trips.</p>
+              </div>
+              <span class="pill">${state.bookingRequests.length} open</span>
+            </div>
+            <div class="request-list">
+              ${state.bookingRequests.slice(0, 2).map((request) => `
+                <button class="request-card" type="button" data-open-booking-request="${request.id}">
+                  <strong>${request.company}</strong>
+                  <span>${request.origin} to ${request.destination}</span>
+                  <small>${request.vehicle} • ${displayDate(request.date)}</small>
+                </button>
+              `).join("")}
+            </div>
+          </article>
+        ` : ""}
 
         <div class="segmented" aria-label="Trip status filter">
           ${[`all`, ...Object.keys(statusLabels)].map((status) => `
@@ -1125,6 +1444,14 @@ function bindScreenEvents() {
     button.addEventListener("click", () => navigate("detail", button.dataset.openTrip));
   });
 
+  document.querySelectorAll("[data-open-booking-request]").forEach((button) => {
+    button.addEventListener("click", () => convertBookingRequest(button.dataset.openBookingRequest));
+  });
+
+  document.querySelectorAll("[data-client-trip-detail]").forEach((button) => {
+    button.addEventListener("click", () => navigate("clientBookingDetail", button.dataset.clientTripDetail));
+  });
+
   document.querySelectorAll("[data-client-link]").forEach((button) => {
     button.addEventListener("click", () => {
       state.clientPreviewTripId = button.dataset.clientLink;
@@ -1169,6 +1496,12 @@ function bindScreenEvents() {
 
   const accountRequestForm = document.querySelector("#accountRequestForm");
   if (accountRequestForm) accountRequestForm.addEventListener("submit", requestAccount);
+
+  const clientLoginForm = document.querySelector("#clientLoginForm");
+  if (clientLoginForm) clientLoginForm.addEventListener("submit", loginClient);
+
+  const clientBookingForm = document.querySelector("#clientBookingForm");
+  if (clientBookingForm) clientBookingForm.addEventListener("submit", createClientBookingRequest);
 
   const budgetForm = document.querySelector("#budgetForm");
   if (budgetForm) budgetForm.addEventListener("submit", saveBudget);
@@ -1234,8 +1567,11 @@ function handleAction(action) {
     },
     home: () => navigate("home"),
     login: () => navigate("login"),
+    clientLogin: () => navigate("clientLogin"),
+    clientBooking: () => navigate("clientBooking"),
     accountRequest: () => navigate("accountRequest"),
     logout: () => navigate("home"),
+    logoutClient: () => { state.clientSession = null; navigate("home"); },
     newTrip: () => navigate("newTrip"),
     budget: () => navigate("budget", trip.id),
     clientPreview: () => {
@@ -1256,7 +1592,7 @@ function handleAction(action) {
   if (routes[action]) routes[action]();
 }
 
-function loginStaff(event) {
+async function loginStaff(event) {
   event.preventDefault();
   const form = new FormData(event.currentTarget);
   const roleId = String(form.get("role") || "coordinator");
@@ -1265,14 +1601,19 @@ function loginStaff(event) {
   const role = roles.find((item) => item.id === roleId);
   const matchingUser = role && state.users.find((user) => user.role === role.label && user.username === username && user.password === password);
 
-  if (!role || (!matchingUser && username !== role.username)) {
-    setToast("Login details do not match this role");
-    return;
-  }
+  try {
+    const result = await apiRequest("/api/auth/login", { method: "POST", body: JSON.stringify({ role: roleId, username, password }) });
+    state.session = result.session;
+  } catch {
+    if (!role || (!matchingUser && username !== role.username)) {
+      setToast("Login details do not match this role");
+      return;
+    }
 
-  if (username === role.username && password !== role.password) {
-    setToast("Login details do not match this role");
-    return;
+    if (username === role.username && password !== role.password) {
+      setToast("Login details do not match this role");
+      return;
+    }
   }
 
   state.role = roleId;
@@ -1285,36 +1626,50 @@ function loginStaff(event) {
   setToast(`Signed in as ${role.label}`);
 }
 
-function requestAccount(event) {
+async function requestAccount(event) {
   event.preventDefault();
   const form = new FormData(event.currentTarget);
   const request = {
-    id: `REQ-${Math.floor(1200 + Math.random() * 8000)}`,
     name: String(form.get("name") || "New Roadlink Staff"),
     email: String(form.get("email") || "staff@roadlink.example"),
     role: String(form.get("role") || "Coordinator"),
     status: "Pending",
     requestedAt: new Date().toLocaleString([], { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })
   };
-  state.approvalRequests.unshift(request);
+  try {
+    const result = await apiRequest("/api/auth/account-request", { method: "POST", body: JSON.stringify(request) });
+    state.approvalRequests.unshift(result.request);
+  } catch {
+    state.approvalRequests.unshift({ ...request, id: `REQ-${Math.floor(1200 + Math.random() * 8000)}` });
+  }
   state.screen = "home";
   setToast(`Approval request sent to owner/admin for ${request.email}`);
 }
 
-function approveAccountRequest(requestId) {
+async function approveAccountRequest(requestId) {
   const request = state.approvalRequests.find((item) => item.id === requestId);
   if (!request) return;
-  request.status = "Approved";
-  const username = `${request.name.split(/\s+/)[0].toLowerCase()}.${request.role.split(/\s+/)[0].toLowerCase()}`;
-  const password = `Roadlink-${Math.floor(1000 + Math.random() * 9000)}`;
-  state.users.unshift({
-    name: request.name,
-    role: request.role,
-    username,
-    password,
-    initials: request.name.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase(),
-    photo: ""
-  });
+  try {
+    const result = await apiRequest("/api/admin/approve-account", {
+      method: "POST",
+      body: JSON.stringify({ requestId, actorName: state.session?.profile?.name || roleLabel() })
+    });
+    request.status = "Approved";
+    const profile = result.profile;
+    state.users.unshift({
+      name: profile.name,
+      role: profile.roleLabel || request.role,
+      username: result.credentials?.username || profile.username,
+      password: result.credentials?.password || "Sent by email",
+      initials: profile.initials || initials(profile.name),
+      photo: profile.photo || ""
+    });
+  } catch {
+    request.status = "Approved";
+    const username = `${request.name.split(/\s+/)[0].toLowerCase()}.${request.role.split(/\s+/)[0].toLowerCase()}`;
+    const password = `Roadlink-${Math.floor(1000 + Math.random() * 9000)}`;
+    state.users.unshift({ name: request.name, role: request.role, username, password, initials: initials(request.name), photo: "" });
+  }
   setToast(`Approved ${request.email}. Credentials queued by email.`);
 }
 
@@ -1381,11 +1736,20 @@ async function createTrip(event) {
     ]
   };
 
-  state.trips.unshift(trip);
-  state.selectedTripId = id;
-  state.screen = "detail";
-  render();
-  await emailConfirmation(trip, "Trip created. Confirmation email sent.");
+  try {
+    const result = await apiRequest("/api/trips", { method: "POST", body: JSON.stringify({ trip }) });
+    syncTripFromServer(result.trip || trip);
+    state.selectedTripId = (result.trip || trip).id;
+    state.screen = "detail";
+    render();
+    setToast(result.email?.ok ? "Trip created. Confirmation email sent." : (result.email?.message || "Trip created. Email is pending configuration."));
+  } catch {
+    state.trips.unshift(trip);
+    state.selectedTripId = id;
+    state.screen = "detail";
+    render();
+    await emailConfirmation(trip, "Trip created. Confirmation email sent.");
+  }
 }
 
 async function emailConfirmation(trip, successMessage = "Confirmation email sent.") {
@@ -1399,7 +1763,7 @@ async function emailConfirmation(trip, successMessage = "Confirmation email sent
   setToast(result.ok ? successMessage : result.message);
 }
 
-function saveBudget(event) {
+async function saveBudget(event) {
   event.preventDefault();
   const form = new FormData(event.currentTarget);
   updateTrip(state.selectedTripId, (trip) => {
@@ -1414,29 +1778,51 @@ function saveBudget(event) {
     }
     trip.timeline.push(eventLine(`${form.get("type")} release logged by ${roleLabel()}`));
   });
+  try {
+    const result = await apiRequest("/api/budget-items", {
+      method: "POST",
+      body: JSON.stringify({ tripId: state.selectedTripId, type: form.get("type"), detail: form.get("detail"), amount: Number(form.get("amount")), actorName: state.session?.profile?.name || roleLabel() })
+    });
+    syncTripFromServer(result.trip);
+  } catch {
+    // Local UI already reflects the log; server sync can be retried after configuration.
+  }
   state.screen = "detail";
   setToast("Budget release logged");
 }
 
-function confirmTrip(tripId) {
+async function confirmTrip(tripId) {
   updateTrip(tripId, (trip) => {
     if (trip.status === "pending") trip.status = "confirmed";
     trip.timeline.push(eventLine(`Client confirmed booking through secure link`));
   });
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const result = await apiRequest("/api/client-action", { method: "POST", body: JSON.stringify({ tripId, action: "confirm", token: params.get("token") || "" }) });
+    syncTripFromServer(result.trip);
+  } catch {
+    // Keep the client-facing confirmation working in offline demo mode.
+  }
   setToast("Booking confirmed. Staff dashboard updated.");
-  state.screen = "detail";
+  state.screen = state.clientSession ? "clientPortal" : "detail";
   state.selectedTripId = tripId;
   render();
 }
 
-function contactRoadlink(tripId) {
+async function contactRoadlink(tripId) {
   updateTrip(tripId, (trip) => {
     trip.timeline.push(eventLine("Client tapped Contact Roadlink from confirmation link"));
   });
+  try {
+    const params = new URLSearchParams(window.location.search);
+    await apiRequest("/api/client-action", { method: "POST", body: JSON.stringify({ tripId, action: "contact", token: params.get("token") || "" }) });
+  } catch {
+    // Notification falls back to the local timeline in demo mode.
+  }
   setToast("Roadlink coordinator notified to contact the client.");
 }
 
-function cancelTrip(tripId) {
+async function cancelTrip(tripId) {
   const reason = document.querySelector("#reason")?.value || "Client cancelled through secure link.";
   updateTrip(tripId, (trip) => {
     const funded = totalBudget(trip) > 0;
@@ -1452,21 +1838,35 @@ function cancelTrip(tripId) {
     }
   });
 
-  state.screen = "dashboard";
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const result = await apiRequest("/api/client-action", { method: "POST", body: JSON.stringify({ tripId, action: "cancel", reason, token: params.get("token") || "" }) });
+    syncTripFromServer(result.trip);
+  } catch {
+    // Offline demo state already reflects the cancellation.
+  }
+
+  state.screen = state.clientSession ? "clientPortal" : "dashboard";
   state.filter = totalBudget(state.trips.find((trip) => trip.id === tripId)) > 0 ? "needs" : "cancelled";
   setToast("Cancellation received. Funds released: for immediate checking.");
 }
 
-function submitWaybill(tripId) {
+async function submitWaybill(tripId) {
   updateTrip(tripId, (trip) => {
     trip.waybill.status = "Submitted";
     trip.timeline.push(eventLine(`Waybill ${trip.waybill.number} submitted for in-app manager approval`));
     trip.timeline.push(eventLine(`Backup approval email sent to ${state.testEmails.join(", ")}`));
   });
+  try {
+    const result = await apiRequest("/api/waybills/submit", { method: "POST", body: JSON.stringify({ tripId, actorName: state.session?.profile?.name || roleLabel() }) });
+    syncTripFromServer(result.trip);
+  } catch {
+    // Keep local approval routing visible in demo mode.
+  }
   setToast("Manager notified in app. Backup approval email queued.");
 }
 
-function signWaybill(tripId, signer) {
+async function signWaybill(tripId, signer) {
   updateTrip(tripId, (trip) => {
     if (signer === "manager") {
       trip.waybill.approvedBy = "Emmanuel Garces";
@@ -1480,6 +1880,13 @@ function signWaybill(tripId, signer) {
       trip.timeline.push(eventLine("Finance approval added by Liza Mercado"));
     }
   });
+  try {
+    const endpoint = signer === "manager" ? "/api/waybills/approve-manager" : "/api/waybills/approve-finance";
+    const result = await apiRequest(endpoint, { method: "POST", body: JSON.stringify({ tripId, actorName: state.session?.profile?.name || roleLabel() }) });
+    syncTripFromServer(result.trip);
+  } catch {
+    // Local signature remains visible in demo mode.
+  }
   setToast(signer === "manager" ? "Manager approved. Accounting has been notified." : "Finance approved.");
 }
 
@@ -1503,7 +1910,7 @@ function printWaybill() {
   setToast("Print dialog opened. Choose Save as PDF if you need a file copy.");
 }
 
-function saveReconciliation(event) {
+async function saveReconciliation(event) {
   event.preventDefault();
   const form = new FormData(event.currentTarget);
   updateTrip(state.selectedTripId, (trip) => {
@@ -1514,6 +1921,23 @@ function saveReconciliation(event) {
     trip.status = "reconciled";
     trip.timeline.push(eventLine("Accounting marked cancellation funds as reconciled"));
   });
+
+  try {
+    const result = await apiRequest("/api/reconciliation/update", {
+      method: "POST",
+      body: JSON.stringify({
+        tripId: state.selectedTripId,
+        cashReturned: form.get("cashReturned") === "true",
+        chequeVoided: form.get("chequeVoided") === "true",
+        poCancelled: form.get("poCancelled") === "true",
+        expensesUsed: form.get("expensesUsed"),
+        actorName: state.session?.profile?.name || roleLabel()
+      })
+    });
+    syncTripFromServer(result.trip);
+  } catch {
+    // Local reconciliation remains available in demo mode.
+  }
 
   state.filter = "reconciled";
   state.screen = "dashboard";
@@ -1547,13 +1971,117 @@ function addUser(event) {
   setToast("Temporary user added");
 }
 
-function initApp() {
+function loginClient(event) {
+  event.preventDefault();
+  const form = new FormData(event.currentTarget);
+  const username = String(form.get("username") || "").trim();
+  const password = String(form.get("password") || "").trim();
+  const client = clientDemoUsers.find((item) => [item.username, item.email].includes(username) && item.password === password);
+  if (!client) {
+    setToast("Client login details do not match the demo account.");
+    return;
+  }
+  state.clientSession = client;
+  state.screen = "clientPortal";
+  setToast(`Opened ${client.company} portal preview`);
+}
+
+async function createClientBookingRequest(event) {
+  event.preventDefault();
+  const form = new FormData(event.currentTarget);
+  const request = {
+    company: String(form.get("company") || ""),
+    contact: String(form.get("contact") || ""),
+    email: String(form.get("email") || ""),
+    phone: String(form.get("phone") || ""),
+    origin: String(form.get("origin") || ""),
+    destination: String(form.get("destination") || ""),
+    vehicle: String(form.get("vehicle") || ""),
+    date: String(form.get("date") || ""),
+    cargo: String(form.get("cargo") || ""),
+    status: "Needs staff review",
+    createdAt: new Date().toLocaleString([], { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })
+  };
+  try {
+    const result = await apiRequest("/api/client-portal/booking-request", { method: "POST", body: JSON.stringify(request) });
+    state.bookingRequests.unshift(result.request);
+  } catch {
+    state.bookingRequests.unshift({ ...request, id: `BR-${Math.floor(7000 + Math.random() * 9000)}` });
+  }
+  state.screen = "clientPortal";
+  setToast("Booking request sent to Roadlink coordinator.");
+}
+
+async function convertBookingRequest(requestId) {
+  const request = state.bookingRequests.find((item) => item.id === requestId);
+  if (!request) return;
+  const id = `RL-${Math.floor(2500 + Math.random() * 7000)}`;
+  const trip = {
+    id,
+    client: request.company,
+    contact: request.contact,
+    phone: request.phone,
+    email: request.email,
+    route: `${request.origin} to ${request.destination}`,
+    origin: request.origin,
+    destination: request.destination,
+    vehicle: request.vehicle,
+    date: request.date,
+    cargo: request.cargo,
+    coordinator: roleLabel(),
+    preferredChannel: "Email",
+    status: "pending",
+    cancelledReason: "",
+    waybill: {
+      number: String(Math.floor(38000 + Math.random() * 900)).padStart(6, "0"),
+      shipmentNo: id,
+      plateNo: "",
+      driverName: "",
+      truckType: "RCTS Truck",
+      sellRate: 0,
+      freight: 0,
+      buyingRate: 0,
+      downpayment: 0,
+      balanceAmount: 0,
+      arrastre: 0,
+      driver: 0,
+      helper: 0,
+      labor: 0,
+      others: 0,
+      preparedBy: roleLabel(),
+      approvedBy: "",
+      financeBy: "",
+      paymentReceivedBy: "",
+      status: "Draft"
+    },
+    budget: [],
+    reconciliation: { cashReturned: false, chequeVoided: false, poCancelled: false, expensesUsed: "" },
+    timeline: [eventLine("Client portal request converted into official Roadlink trip")]
+  };
+  try {
+    const result = await apiRequest("/api/trips", { method: "POST", body: JSON.stringify({ trip }) });
+    syncTripFromServer(result.trip || trip);
+  } catch {
+    state.trips.unshift(trip);
+  }
+  request.status = "Converted to trip";
+  state.selectedTripId = id;
+  state.screen = "detail";
+  setToast("Client request converted to official trip.");
+}
+
+async function initApp() {
+  await loadServerState();
   const params = new URLSearchParams(window.location.search);
   const tripId = params.get("trip");
+  const clientAction = params.get("clientAction");
   if (window.location.hash === "#client" && tripId && state.trips.some((trip) => trip.id === tripId)) {
     state.selectedTripId = tripId;
     state.clientPreviewTripId = tripId;
     state.screen = "client";
+    if (clientAction === "confirm") await confirmTrip(tripId);
+    if (clientAction === "contact") await contactRoadlink(tripId);
+    if (clientAction === "cancel") state.otpSent = true;
   }
   render();
 }

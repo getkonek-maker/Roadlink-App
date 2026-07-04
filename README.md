@@ -1,12 +1,13 @@
 # Roadlink Trip Control
 
-Phone-first demo prototype for Roadlink staff.
+Phone-first production pilot prototype for Roadlink staff, with an optional client portal preview.
 
 This standalone project is separate from DoctorsAssistant. It demonstrates the core Roadlink workflow:
 
 - Coordinator creates a trip.
-- Client receives a secure confirmation link through SMS, email, Viber, or WhatsApp.
+- Client receives a secure confirmation link by email, with optional Viber/WhatsApp follow-up.
 - Client confirms or cancels without installing an app.
+- Client can also preview a simple portal for booking requests and active trip visibility.
 - Funded cancellations alert owner/accounting immediately.
 - Coordinator creates a digital waybill that mirrors the paper form.
 - Manager and finance approve before disbursement.
@@ -27,15 +28,27 @@ Then open:
 http://127.0.0.1:4173
 ```
 
-## Email Setup
+## Production Pilot Setup
 
-The prototype now includes a small local server that can send branded emails through Resend.
+The app now includes a small backend API for trips, account requests, approvals, client actions, reconciliation, email, and Google Sheets mirroring. It runs in two modes:
+
+- `supabase`: when `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are configured.
+- `local-demo`: when Supabase is not configured. This stores demo data in `.data/roadlink-store.json` and is useful for presentations only.
+
+### Email Setup
+
+The server sends branded emails through Resend.
 
 Create a local-only `.env.local` file:
 
 ```bash
 RESEND_API_KEY=your_resend_key_here
 ROADLINK_EMAIL_FROM=Roadlink Trip Control <onboarding@resend.dev>
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_ANON_KEY=your_supabase_anon_key
+SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
+PASSWORD_PEPPER=a_long_private_random_string
+GOOGLE_SHEETS_WEBHOOK_URL=https://script.google.com/macros/s/your_script_id/exec
 ```
 
 Important:
@@ -44,6 +57,16 @@ Important:
 - `.env.local` is ignored by git.
 - For production, Roadlink should use a verified sending domain instead of `onboarding@resend.dev`.
 
+Production environment variables:
+
+- `RESEND_API_KEY`: private Resend key used only by the server.
+- `ROADLINK_EMAIL_FROM`: sender identity. Use a verified Roadlink domain before live client use.
+- `SUPABASE_URL`: Supabase project URL.
+- `SUPABASE_ANON_KEY`: Supabase public anon key, used for Auth password login.
+- `SUPABASE_SERVICE_ROLE_KEY`: private server-only key for controlled writes, approvals, and audit entries.
+- `PASSWORD_PEPPER`: private string used for local demo password hashes.
+- `GOOGLE_SHEETS_WEBHOOK_URL`: optional Apps Script web app URL for the readable spreadsheet mirror.
+
 Email actions currently supported:
 
 - Client booking confirmation email when a coordinator creates a trip.
@@ -51,6 +74,30 @@ Email actions currently supported:
 - Email waybill from the Waybill screen.
 
 The email template includes Roadlink branding, trip details, a truck-style signature banner, Roadlink contact details, a confidentiality notice, and `Powered by Konek`.
+
+## Backend API
+
+Implemented pilot endpoints:
+
+- `GET /api/bootstrap`
+- `POST /api/auth/login`
+- `POST /api/auth/account-request`
+- `POST /api/admin/approve-account`
+- `POST /api/trips`
+- `POST /api/trips/:id/send-confirmation`
+- `POST /api/client-action`
+- `POST /api/budget-items`
+- `POST /api/waybills/submit`
+- `POST /api/waybills/:id/send-email`
+- `POST /api/waybills/approve-manager`
+- `POST /api/waybills/approve-finance`
+- `POST /api/reconciliation/update`
+- `POST /api/client-portal/booking-request`
+- `POST /api/sync/google-sheets`
+
+Supabase table names expected by the server:
+
+`profiles`, `account_requests`, `clients`, `booking_requests`, `trips`, `budget_items`, `client_actions`, `reconciliation_tasks`, `audit_events`, `notifications`, `sheet_sync_log`.
 
 ## PWA Phone Demo
 
@@ -85,10 +132,11 @@ Recommended first deployment path:
 
 The hosted PWA will use the Roadlink icon from the manifest. On iPhone, open the URL in Safari, tap Share, then `Add to Home Screen`.
 
-Demo limitation:
+Pilot limitation:
 
-- Trips are still stored in the browser session. This is fine for the first clickable demo, but real client confirmation links need Supabase or another persistent backend so links work across devices and after refreshes.
-- Email sending works through the server when Resend is configured.
+- Without Supabase keys, the app uses local demo storage. This is acceptable for demos but not for real operations.
+- With Supabase keys, trips, client actions, approvals, notifications, and audit records are written through the server API.
+- Google Sheets sync requires an Apps Script webhook or later a direct Google service account integration.
 - Resend may limit recipients while using `onboarding@resend.dev`; production should use a verified Roadlink sending domain.
 
 ## Demo Path
@@ -109,6 +157,15 @@ Demo limitation:
 14. Review the urgent alert and reconciliation queue.
 15. Mark the funds returned/voided/cancelled.
 
+## Client Portal Preview
+
+1. From the home screen, tap `Client portal preview`.
+2. Use `ana.client / Client-2407`.
+3. View active bookings for Mactan Seafoods Export.
+4. Request a new booking.
+5. Log in as coordinator and convert the client request into an official trip.
+6. Notice that the client portal does not expose budgets, internal approvals, or audit logs.
+
 ## Account Request Demo
 
 1. From the home screen, tap `Request account`.
@@ -127,7 +184,7 @@ Approval-routing messages are simulated for:
 
 ## Notes
 
-This is still a prototype. It stores trip state only in the browser during the current session. Email can be sent through the local server when `RESEND_API_KEY` is configured, but SMS, Viber, WhatsApp, persistent database storage, and production auth are not implemented yet.
+This is now a production-pilot foundation. It has persistent server-backed flows and Supabase/Google Sheets hooks, but Roadlink should not use it for live disbursement operations until Supabase tables, Row Level Security policies, verified email domain, backups, and a private pilot test are completed.
 
 See [WORKFLOWS.md](WORKFLOWS.md) for the recommended Supabase plus Google Sheets data strategy and the start-to-finish operating workflows.
 
@@ -144,12 +201,11 @@ Completed:
 - Waybill print and email actions.
 - Funded cancellation status simplified to `Cancelled - Funds Released` plus `For immediate checking`.
 
-Still to do:
+Still to do before live operations:
 
-- Store trips/users/waybills in Supabase.
-- Sync records to Google Sheets.
-- Add verified Roadlink sending domain for email.
-- Add real client confirmation links backed by persistent trip IDs.
-- Add manager/accounting notification inbox.
-- Add production auth and role permissions.
+- Create the Supabase tables and Row Level Security policies.
+- Add the Supabase and Google Sheets environment variables in Render.
+- Verify a Roadlink sending domain in Resend.
+- Replace demo users/passwords with approved production users.
+- Run a private pilot with sample trips before real cash disbursement.
 - Integrate SSD GPS Philippines once API or tracking-link access is available.

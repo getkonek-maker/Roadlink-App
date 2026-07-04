@@ -1,5 +1,11 @@
 # Roadlink Trip Control Workflows
 
+## Production Pilot Status
+
+The app now has server-backed production pilot hooks. Supabase is the operational source of truth when configured; otherwise the app runs in local demo mode with `.data/roadlink-store.json`. Google Sheets mirroring is supported through `GOOGLE_SHEETS_WEBHOOK_URL`.
+
+The client portal is included as a preview/beta experience so Roadlink can show clients how app-based booking may feel without forcing clients to adopt it immediately. Email confirmation links remain the default client workflow.
+
 ## Data Strategy
 
 Recommended pilot setup:
@@ -30,6 +36,17 @@ Why use Google Sheets anyway:
 7. Owner/admin receives an approval request.
 8. Owner/admin approves the request.
 9. Staff receives temporary credentials by email.
+
+## Client Portal Preview
+
+1. Client opens the Roadlink client portal preview.
+2. Client logs in with an approved client account.
+3. Client views active bookings for their company only.
+4. Client requests a new booking with company, authorized contact, phone, email, from, to, vehicle type, trip date, and cargo notes.
+5. Coordinator sees the request in the staff dashboard.
+6. Coordinator converts the request into an official Roadlink trip.
+7. The official trip still uses email confirmation for a clear client trail.
+8. Client cannot view Roadlink budgets, internal approvals, finance records, or staff audit logs.
 
 ## Booking And Client Confirmation
 
@@ -79,6 +96,15 @@ Why use Google Sheets anyway:
 5. Keep using the same hosted URL for laptop access.
 6. Add Supabase before relying on real cross-device client confirmation links.
 
+Supabase production setup checklist:
+
+- Create tables: `profiles`, `account_requests`, `clients`, `booking_requests`, `trips`, `budget_items`, `client_actions`, `reconciliation_tasks`, `audit_events`, `notifications`, `sheet_sync_log`.
+- Enable Row Level Security on all exposed tables.
+- Staff roles can read/write only their workflow areas.
+- Client users can read only bookings and booking requests tied to their company.
+- `audit_events` should be append-only from the app.
+- Store `SUPABASE_SERVICE_ROLE_KEY` only on Render, never in browser JavaScript.
+
 Why Supabase is needed before production:
 
 - The current demo stores trip records in the browser session.
@@ -102,6 +128,10 @@ Information to request from SSD GPS:
 - Location history endpoint, if available.
 - Update frequency, rate limits, and data retention period.
 - Permission rules for staff roles who can view live locations.
+
+## Google Sheets Mirror
+
+The first implementation uses `GOOGLE_SHEETS_WEBHOOK_URL`, usually a Google Apps Script web app attached to the Roadlink spreadsheet. The backend posts JSON events such as `trip_created`, `budget_logged`, `client_cancel`, and `reconciliation_completed`. The Sheet should be treated as read-only review output for Roadlink managers, not the control source for the app.
 
 ## Demo Script
 
