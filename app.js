@@ -498,7 +498,6 @@ function topbar(title, right = "") {
 function renderHome() {
   return `
     <section class="screen home-screen">
-      <video class="home-video" src="assets/roadlink-home.mov" autoplay muted loop playsinline aria-label="Roadlink fleet video"></video>
       <div class="home-shade" aria-hidden="true"></div>
       <div class="home-hero">
         <img class="home-logo" src="assets/roadlink-logo-home.svg" alt="Roadlink Cargo Transport Service">
@@ -1576,34 +1575,8 @@ function bindScreenEvents() {
       frame.classList.toggle("android", button.dataset.device === "android");
     });
   });
-
-  bindHomeVideoLoop();
 }
 
-function bindHomeVideoLoop() {
-  const video = document.querySelector(".home-video");
-  if (!video) return;
-
-  const restartAtSeconds = 6.2;
-  let isRestarting = false;
-
-  video.addEventListener("timeupdate", () => {
-    if (!video.duration || isRestarting) return;
-    const restartAt = Math.min(Math.max(0.2, restartAtSeconds), Math.max(0.2, video.duration - 0.4));
-    if (video.currentTime < restartAt) return;
-
-    isRestarting = true;
-    video.classList.add("is-fading");
-    window.setTimeout(() => {
-      video.currentTime = 0;
-      video.play();
-      window.requestAnimationFrame(() => video.classList.remove("is-fading"));
-      window.setTimeout(() => {
-        isRestarting = false;
-      }, 320);
-    }, 220);
-  });
-}
 
 function handleAction(action) {
   const trip = selectedTrip();
