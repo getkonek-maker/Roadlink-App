@@ -11,3 +11,15 @@ services:
         sync: false
       - key: ROADLINK_EMAIL_FROM
         value: Roadlink Trip Control <onboarding@resend.dev>
+      - key: SESSION_SECRET
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: PASSWORD_PEPPER
+        sync: false
+      - key: GOOGLE_SHEETS_WEBHOOK_URL
+        sync: false

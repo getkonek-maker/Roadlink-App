@@ -1,6 +1,6 @@
 import { createReadStream, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { dirname, extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -9,6 +9,11 @@ const port = Number(process.env.PORT || 4173);
 const dataPath = join(root, ".data", "roadlink-store.json");
 
 loadLocalEnv();
+
+const sessionSecret = process.env.SESSION_SECRET || randomBytes(32).toString("hex");
+if (!process.env.SESSION_SECRET) {
+  console.warn("SESSION_SECRET is not set. Using a random per-boot secret; sessions will not survive a restart. Set SESSION_SECRET for production.");
+}
 
 const mimeTypes = {
   ".css": "text/css; charset=utf-8",
@@ -174,6 +179,67 @@ function loadLocalEnv() {
 
 function hashPassword(password) {
   return createHash("sha256").update(`${process.env.PASSWORD_PEPPER || "roadlink-demo"}:${password}`).digest("hex");
+}
+
+function signSession(profile) {
+  const payload = { sub: profile.id, role: profile.role, iat: Date.now(), exp: Date.now() + 12 * 60 * 60 * 1000 };
+  const body = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  const signature = createHmac("sha256", sessionSecret).update(body).digest("base64url");
+  return `${body}.${signature}`;
+}
+
+function verifySession(token) {
+  if (!token || !token.includes(".")) return null;
+  const [body, signature] = token.split(".");
+  const expected = createHmac("sha256", sessionSecret).update(body).digest("base64url");
+  const given = Buffer.from(signature);
+  const wanted = Buffer.from(expected);
+  if (given.length !== wanted.length || !timingSafeEqual(given, wanted)) return null;
+  try {
+    const payload = JSON.parse(Buffer.from(body, "base64url").toString());
+    if (!payload.sub || !payload.exp || payload.exp < Date.now()) return null;
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
+function getBearerToken(request) {
+  const header = request.headers.authorization || "";
+  return header.startsWith("Bearer ") ? header.slice(7) : "";
+}
+
+async function requireRole(request, ...roles) {
+  const claims = verifySession(getBearerToken(request));
+  if (!claims) return { ok: false, status: 401, message: "Session expired or invalid. Please log in again." };
+  const profiles = await tableList("profiles");
+  const profile = profiles.find((item) => item.id === claims.sub);
+  if (!profile || profile.status !== "active") return { ok: false, status: 401, message: "Account is no longer active." };
+  if (roles.length && !roles.includes(profile.role)) return { ok: false, status: 403, message: "Not authorized for this action." };
+  return { ok: true, profile: safeProfile(profile) };
+}
+
+const loginAttempts = new Map();
+
+function loginThrottled(key) {
+  const now = Date.now();
+  const entry = loginAttempts.get(key) || { count: 0, resetAt: now + 15 * 60 * 1000 };
+  if (now > entry.resetAt) {
+    loginAttempts.delete(key);
+    return false;
+  }
+  return entry.count >= 5;
+}
+
+function recordLoginFailure(key) {
+  const now = Date.now();
+  const entry = loginAttempts.get(key) || { count: 0, resetAt: now + 15 * 60 * 1000 };
+  if (now > entry.resetAt) {
+    entry.count = 0;
+    entry.resetAt = now + 15 * 60 * 1000;
+  }
+  entry.count += 1;
+  loginAttempts.set(key, entry);
 }
 
 function safeProfile(profile) {
@@ -373,7 +439,47 @@ async function tableUpdate(table, id, patch) {
   return Array.isArray(rows) ? rows[0] : patch;
 }
 
-async function currentBootstrap() {
+function publicBootstrap() {
+  return {
+    mode: supabaseConfigured() ? "supabase" : "local-demo",
+    googleSheets: Boolean(process.env.GOOGLE_SHEETS_WEBHOOK_URL),
+    email: Boolean(process.env.RESEND_API_KEY)
+  };
+}
+
+function clientStatus(status) {
+  if (status === "funds") return "confirmed";
+  if (status === "reconciled" || status === "needs") return "cancelled";
+  return status;
+}
+
+function clientTripView(trip) {
+  return {
+    id: trip.id,
+    client: trip.client,
+    contact: trip.contact,
+    phone: trip.phone,
+    email: trip.email,
+    route: trip.route,
+    origin: trip.origin,
+    destination: trip.destination,
+    vehicle: trip.vehicle,
+    date: trip.date,
+    cargo: trip.cargo,
+    status: clientStatus(trip.status),
+    cancelledReason: trip.cancelledReason,
+    timeline: [],
+    budget: [],
+    waybill: { number: trip.waybill?.number || "", shipmentNo: trip.waybill?.shipmentNo || trip.id, plateNo: trip.waybill?.plateNo || "" },
+    reconciliation: { cashReturned: false, chequeVoided: false, poCancelled: false, expensesUsed: "" }
+  };
+}
+
+function clientOwnsTrip(trip, profile) {
+  return (profile.company && trip.client === profile.company) || (profile.email && trip.email === profile.email);
+}
+
+async function sessionBootstrap(profile) {
   const [profiles, accountRequests, clients, bookingRequests, trips, notifications, auditEvents] = await Promise.all([
     tableList("profiles"),
     tableList("account_requests"),
@@ -383,15 +489,55 @@ async function currentBootstrap() {
     tableList("notifications"),
     tableList("audit_events")
   ]);
+  const normalizedTrips = trips.map(normalizeTrip);
+  const base = { ...publicBootstrap(), profile };
+
+  if (profile.role === "client") {
+    return {
+      ...base,
+      profiles: [],
+      accountRequests: [],
+      clients: [],
+      bookingRequests: bookingRequests.filter((item) => (profile.company && item.company === profile.company) || (profile.email && item.email === profile.email)),
+      trips: normalizedTrips.filter((trip) => clientOwnsTrip(trip, profile)).map(clientTripView),
+      notifications: [],
+      auditEvents: []
+    };
+  }
+
+  if (profile.role === "coordinator") {
+    return {
+      ...base,
+      profiles: [safeProfile(profiles.find((item) => item.id === profile.id))].filter(Boolean),
+      accountRequests: [],
+      clients,
+      bookingRequests,
+      trips: normalizedTrips,
+      notifications: notifications.filter((item) => item.role === "coordinator"),
+      auditEvents: []
+    };
+  }
+
+  if (profile.role === "accounting") {
+    return {
+      ...base,
+      profiles: [safeProfile(profiles.find((item) => item.id === profile.id))].filter(Boolean),
+      accountRequests,
+      clients,
+      bookingRequests,
+      trips: normalizedTrips,
+      notifications: notifications.filter((item) => item.role === "accounting"),
+      auditEvents
+    };
+  }
+
   return {
-    mode: supabaseConfigured() ? "supabase" : "local-demo",
-    googleSheets: Boolean(process.env.GOOGLE_SHEETS_WEBHOOK_URL),
-    email: Boolean(process.env.RESEND_API_KEY),
+    ...base,
     profiles: profiles.map(safeProfile),
     accountRequests,
     clients,
     bookingRequests,
-    trips: trips.map(normalizeTrip),
+    trips: normalizedTrips,
     notifications,
     auditEvents
   };
@@ -527,10 +673,13 @@ async function sendEmailKind(kind, trip, request) {
   return sendViaResend(email, kind, trip);
 }
 
-async function handleLogin(payload) {
+async function handleLogin(payload, request) {
   const username = String(payload.username || payload.email || "").trim();
   const password = String(payload.password || "").trim();
   const requestedRole = String(payload.role || "").trim();
+  const clientIp = request?.headers["x-forwarded-for"]?.split(",")[0]?.trim() || request?.socket?.remoteAddress || "unknown";
+  const throttleKey = `${clientIp}:${username.toLowerCase()}`;
+  if (loginThrottled(throttleKey)) return { ok: false, status: 429, message: "Too many login attempts. Try again in 15 minutes." };
 
   if (supabaseConfigured() && username.includes("@")) {
     try {
@@ -540,21 +689,40 @@ async function handleLogin(payload) {
         body: JSON.stringify({ email: username, password })
       });
       const profiles = await tableList("profiles");
-      const profile = profiles.find((item) => item.email === username) || { email: username, role: requestedRole || "coordinator", name: username };
-      return { ok: true, session: { accessToken: auth.access_token, refreshToken: auth.refresh_token, profile: safeProfile(profile) } };
+      const profile = profiles.find((item) => item.email === username);
+      if (!profile || profile.status !== "active") {
+        recordLoginFailure(throttleKey);
+        return { ok: false, status: 403, message: "No active Roadlink profile is linked to this account. Ask an admin to set one up." };
+      }
+      if (requestedRole && requestedRole !== profile.role) {
+        recordLoginFailure(throttleKey);
+        return { ok: false, message: "Login details do not match this role." };
+      }
+      loginAttempts.delete(throttleKey);
+      void auth;
+      return { ok: true, session: { accessToken: signSession(profile), profile: safeProfile(profile) } };
     } catch (error) {
+      recordLoginFailure(throttleKey);
       return { ok: false, message: error.message || "Supabase login failed." };
     }
   }
 
-  const profiles = readStore().profiles;
+  const profiles = await tableList("profiles");
   const profile = profiles.find((item) => item.username === username && item.status === "active" && item.passwordHash === hashPassword(password));
-  if (!profile || (requestedRole && requestedRole !== profile.role)) return { ok: false, message: "Login details do not match this role." };
-  return { ok: true, session: { accessToken: `local-${profile.id}-${Date.now()}`, profile: safeProfile(profile) } };
+  if (!profile || (requestedRole && requestedRole !== profile.role)) {
+    recordLoginFailure(throttleKey);
+    return { ok: false, message: "Login details do not match this role." };
+  }
+  loginAttempts.delete(throttleKey);
+  return { ok: true, session: { accessToken: signSession(profile), profile: safeProfile(profile) } };
 }
 
-async function handleCreateTrip(payload, request) {
+async function handleCreateTrip(payload, request, actor) {
   const trip = normalizeTrip(payload.trip || payload);
+  if (actor) {
+    trip.coordinator = actor.name;
+    trip.waybill.preparedBy = actor.name;
+  }
   trip.timeline.push(eventLine(`Confirmation email queued for ${trip.email}`));
   await saveTrip(trip);
   await addAudit({ tripId: trip.id, actor: trip.coordinator, action: "trip_created", detail: `${trip.route} for ${trip.client}` });
@@ -568,7 +736,7 @@ async function handleClientAction(payload) {
   const action = String(payload.action || "contact");
   const trip = await findTrip(payload.tripId);
   if (!trip) return { ok: false, status: 404, message: "Trip not found." };
-  if (trip.clientToken && payload.token && payload.token !== trip.clientToken) return { ok: false, status: 403, message: "This client link is invalid." };
+  if (trip.clientToken && payload.token !== trip.clientToken) return { ok: false, status: 403, message: "This client link is invalid." };
   if (trip.clientTokenExpiresAt && new Date(trip.clientTokenExpiresAt) < new Date()) return { ok: false, status: 403, message: "This client link has expired." };
 
   if (action === "confirm" && trip.status === "pending") trip.status = "confirmed";
@@ -598,65 +766,73 @@ function totalBudget(trip) {
   return (trip.budget || []).reduce((sum, item) => sum + Number(item.amount || 0), 0);
 }
 
-async function handleBudget(payload) {
+async function handleBudget(payload, actor) {
   const trip = await findTrip(payload.tripId);
   if (!trip) return { ok: false, status: 404, message: "Trip not found." };
-  const item = { id: `BI-${Date.now()}`, type: payload.type, detail: payload.detail, amount: Number(payload.amount || 0), state: "Logged" };
+  const allowedTypes = ["Cash", "Cheque", "PO", "Fuel", "Shipping", "Meals", "Misc"];
+  const type = allowedTypes.includes(payload.type) ? payload.type : "Misc";
+  const amount = Number(payload.amount || 0);
+  if (!Number.isFinite(amount) || amount < 0) return { ok: false, status: 400, message: "Budget amount must be a positive number." };
+  const actorName = actor?.name || "Accounting";
+  const item = { id: `BI-${Date.now()}`, type, detail: String(payload.detail || "").slice(0, 500), amount, state: "Logged" };
   trip.budget.push(item);
   if (["pending", "confirmed"].includes(trip.status)) trip.status = "funds";
-  trip.timeline.push(eventLine(`${item.type} release logged by ${payload.actorName || "Accounting"}`));
+  trip.timeline.push(eventLine(`${item.type} release logged by ${actorName}`));
   await saveTrip(trip);
   await tableInsert("budget_items", { ...item, tripId: trip.id, createdAt: nowStamp() });
-  await addAudit({ tripId: trip.id, actor: payload.actorName || "Accounting", action: "budget_logged", detail: `${item.type}: ${money(item.amount)}` });
+  await addAudit({ tripId: trip.id, actor: actorName, action: "budget_logged", detail: `${item.type}: ${money(item.amount)}` });
   await syncGoogleSheets("budget_logged", { trip, item }).catch((error) => console.warn(error.message));
   return { ok: true, trip };
 }
 
-async function handleWaybillApproval(payload, signer) {
+async function handleWaybillApproval(payload, signer, actor) {
   const trip = await findTrip(payload.tripId);
   if (!trip) return { ok: false, status: 404, message: "Trip not found." };
+  const actorName = actor?.name || (signer === "manager" ? "Owner / Manager" : "Accounting");
   if (signer === "manager") {
-    trip.waybill.approvedBy = payload.actorName || "Owner / Manager";
+    trip.waybill.approvedBy = actorName;
     trip.waybill.status = trip.waybill.financeBy ? "Approved" : "Manager Signed";
     trip.timeline.push(eventLine(`Manager approval added by ${trip.waybill.approvedBy}`));
     await addNotification({ role: "accounting", tripId: trip.id, title: "Waybill approved", body: `${trip.route} is ready for finance release review.` });
   }
   if (signer === "finance") {
-    trip.waybill.financeBy = payload.actorName || "Accounting";
-    trip.waybill.status = trip.waybill.approvedBy ? "Approved" : "Finance Signed";
+    if (!trip.waybill.approvedBy) return { ok: false, status: 409, message: "Manager approval is required before finance approval." };
+    trip.waybill.financeBy = actorName;
+    trip.waybill.status = "Approved";
     trip.timeline.push(eventLine(`Finance approval added by ${trip.waybill.financeBy}`));
   }
   await saveTrip(trip);
-  await addAudit({ tripId: trip.id, actor: payload.actorName || signer, action: `waybill_${signer}_approved`, detail: `Waybill ${trip.waybill.number}` });
+  await addAudit({ tripId: trip.id, actor: actorName, action: `waybill_${signer}_approved`, detail: `Waybill ${trip.waybill.number}` });
   await syncGoogleSheets(`waybill_${signer}_approved`, trip).catch((error) => console.warn(error.message));
   return { ok: true, trip };
 }
 
-async function handleWaybillSubmit(payload) {
+async function handleWaybillSubmit(payload, actor) {
   const trip = await findTrip(payload.tripId);
   if (!trip) return { ok: false, status: 404, message: "Trip not found." };
   trip.waybill.status = "Submitted";
   trip.timeline.push(eventLine(`Waybill ${trip.waybill.number} submitted for in-app manager approval`));
   await saveTrip(trip);
   await addNotification({ role: "owner", tripId: trip.id, title: "Waybill for approval", body: `${trip.route} needs manager approval.` });
-  await addAudit({ tripId: trip.id, actor: payload.actorName || "Coordinator", action: "waybill_submitted", detail: `Waybill ${trip.waybill.number}` });
+  await addAudit({ tripId: trip.id, actor: actor?.name || "Coordinator", action: "waybill_submitted", detail: `Waybill ${trip.waybill.number}` });
   return { ok: true, trip };
 }
 
-async function handleReconciliation(payload) {
+async function handleReconciliation(payload, actor) {
   const trip = await findTrip(payload.tripId);
   if (!trip) return { ok: false, status: 404, message: "Trip not found." };
+  if (trip.status !== "needs") return { ok: false, status: 409, message: "Only trips marked Cancelled - Funds Released can be reconciled." };
   trip.reconciliation = {
     cashReturned: Boolean(payload.cashReturned),
     chequeVoided: Boolean(payload.chequeVoided),
     poCancelled: Boolean(payload.poCancelled),
-    expensesUsed: payload.expensesUsed || ""
+    expensesUsed: String(payload.expensesUsed || "").slice(0, 1000)
   };
   trip.status = "reconciled";
   trip.timeline.push(eventLine("Accounting marked cancellation funds as reconciled"));
   await saveTrip(trip);
-  await tableUpdate("reconciliation_tasks", `REC-${trip.id}`, { status: "complete", completedAt: nowStamp(), notes: payload.expensesUsed || "" });
-  await addAudit({ tripId: trip.id, actor: payload.actorName || "Accounting", action: "reconciliation_completed", detail: payload.expensesUsed || "Completed" });
+  await tableUpdate("reconciliation_tasks", `REC-${trip.id}`, { status: "complete", completedAt: nowStamp(), notes: trip.reconciliation.expensesUsed });
+  await addAudit({ tripId: trip.id, actor: actor?.name || "Accounting", action: "reconciliation_completed", detail: trip.reconciliation.expensesUsed || "Completed" });
   await syncGoogleSheets("reconciliation_completed", trip).catch((error) => console.warn(error.message));
   return { ok: true, trip };
 }
@@ -668,16 +844,17 @@ async function handleAccountRequest(payload) {
   return { ok: true, request };
 }
 
-async function handleApproveAccount(payload) {
+async function handleApproveAccount(payload, actor) {
   const request = (await tableList("account_requests")).find((item) => item.id === payload.requestId);
   if (!request) return { ok: false, status: 404, message: "Request not found." };
+  if (request.status === "Approved") return { ok: false, status: 409, message: "This request was already approved." };
   const username = `${request.name.split(/\s+/)[0].toLowerCase()}.${String(request.role).split(/\s+/)[0].toLowerCase()}`;
   const tempPassword = `Roadlink-${Math.floor(1000 + Math.random() * 9000)}`;
   const role = roleSlug(request.role);
   const profile = { id: `USR-${Date.now()}`, name: request.name, email: request.email, role, roleLabel: request.role, username, passwordHash: hashPassword(tempPassword), company: request.company || "Roadlink", phone: request.phone || "", status: "active", initials: initials(request.name), photo: "" };
   await tableUpdate("account_requests", request.id, { status: "Approved", approvedAt: nowStamp() });
   await tableInsert("profiles", profile);
-  await addAudit({ actor: payload.actorName || "Admin", action: "account_approved", detail: `${request.email} approved as ${request.role}` });
+  await addAudit({ actor: actor?.name || "Admin", action: "account_approved", detail: `${request.email} approved as ${request.role}` });
   return { ok: true, request: { ...request, status: "Approved" }, profile: safeProfile(profile), credentials: { username, password: tempPassword } };
 }
 
@@ -694,8 +871,22 @@ function initials(name = "") {
   return name.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase() || "RL";
 }
 
-async function handleBookingRequest(payload) {
-  const request = { id: `BR-${Math.floor(7000 + Math.random() * 9000)}`, company: payload.company, contact: payload.contact, email: payload.email, phone: payload.phone, origin: payload.origin, destination: payload.destination, vehicle: payload.vehicle, date: payload.date, cargo: payload.cargo || "", status: "Needs staff review", createdAt: nowStamp(), clientId: payload.clientId || "" };
+async function handleBookingRequest(payload, actor) {
+  const request = {
+    id: `BR-${Math.floor(7000 + Math.random() * 9000)}`,
+    company: actor?.company || payload.company,
+    contact: actor?.name || payload.contact,
+    email: actor?.email || payload.email,
+    phone: payload.phone,
+    origin: payload.origin,
+    destination: payload.destination,
+    vehicle: payload.vehicle,
+    date: payload.date,
+    cargo: payload.cargo || "",
+    status: "Needs staff review",
+    createdAt: nowStamp(),
+    clientId: actor?.id || payload.clientId || ""
+  };
   await tableInsert("booking_requests", request);
   await addNotification({ role: "coordinator", title: "Client booking request", body: `${request.company} requested ${request.origin} to ${request.destination}.` });
   await syncGoogleSheets("client_booking_request", request).catch((error) => console.warn(error.message));
@@ -705,31 +896,49 @@ async function handleBookingRequest(payload) {
 async function handleRequest(request, response) {
   const url = new URL(request.url || "/", `http://${request.headers.host}`);
 
+  const guard = (roles, fn) => async () => {
+    const auth = await requireRole(request, ...roles);
+    if (!auth.ok) return auth;
+    return fn(auth.profile);
+  };
+
   if (request.method === "GET" && url.pathname === "/api/health") return json(response, 200, { ok: true, service: "roadlink-trip-control", mode: supabaseConfigured() ? "supabase" : "local-demo" });
-  if (request.method === "GET" && url.pathname === "/api/bootstrap") return json(response, 200, { ok: true, data: await currentBootstrap() });
+  if (request.method === "GET" && url.pathname === "/api/bootstrap") return json(response, 200, { ok: true, data: publicBootstrap() });
+  if (request.method === "GET" && url.pathname === "/api/session/bootstrap") {
+    const auth = await requireRole(request);
+    if (!auth.ok) return json(response, auth.status || 401, auth);
+    return json(response, 200, { ok: true, data: await sessionBootstrap(auth.profile) });
+  }
+  if (request.method === "GET" && url.pathname === "/api/client-trip") {
+    const trip = await findTrip(url.searchParams.get("trip") || "");
+    if (!trip) return json(response, 404, { ok: false, message: "Trip not found." });
+    const token = url.searchParams.get("token") || "";
+    if (trip.clientToken && token !== trip.clientToken) return json(response, 403, { ok: false, message: "This client link is invalid." });
+    if (trip.clientTokenExpiresAt && new Date(trip.clientTokenExpiresAt) < new Date()) return json(response, 403, { ok: false, message: "This client link has expired." });
+    return json(response, 200, { ok: true, trip: clientTripView(trip) });
+  }
 
   if (request.method === "POST" && url.pathname.startsWith("/api/")) {
     let payload;
     try { payload = await readJson(request); } catch { return json(response, 400, { ok: false, message: "Invalid JSON payload." }); }
 
     const routes = {
-      "/api/auth/login": () => handleLogin(payload),
+      "/api/auth/login": () => handleLogin(payload, request),
       "/api/auth/account-request": () => handleAccountRequest(payload),
-      "/api/admin/approve-account": () => handleApproveAccount(payload),
-      "/api/trips": () => handleCreateTrip(payload, request),
+      "/api/admin/approve-account": guard(["admin", "owner"], (actor) => handleApproveAccount(payload, actor)),
+      "/api/trips": guard(["coordinator", "owner", "admin"], (actor) => handleCreateTrip(payload, request, actor)),
       "/api/client-action": () => handleClientAction(payload),
-      "/api/budget-items": () => handleBudget(payload),
-      "/api/waybills/submit": () => handleWaybillSubmit(payload),
-      "/api/waybills/approve-manager": () => handleWaybillApproval(payload, "manager"),
-      "/api/waybills/approve-finance": () => handleWaybillApproval(payload, "finance"),
-      "/api/reconciliation/update": () => handleReconciliation(payload),
-      "/api/client-portal/booking-request": () => handleBookingRequest(payload),
-      "/api/sync/google-sheets": () => syncGoogleSheets(payload.kind || "manual", payload.payload || payload),
-      "/api/send-email": async () => {
+      "/api/budget-items": guard(["accounting", "admin"], (actor) => handleBudget(payload, actor)),
+      "/api/waybills/submit": guard(["coordinator", "owner", "admin"], (actor) => handleWaybillSubmit(payload, actor)),
+      "/api/waybills/approve-manager": guard(["owner", "admin"], (actor) => handleWaybillApproval(payload, "manager", actor)),
+      "/api/waybills/approve-finance": guard(["accounting", "admin"], (actor) => handleWaybillApproval(payload, "finance", actor)),
+      "/api/reconciliation/update": guard(["accounting", "admin"], (actor) => handleReconciliation(payload, actor)),
+      "/api/client-portal/booking-request": guard(["client"], (actor) => handleBookingRequest(payload, actor)),
+      "/api/sync/google-sheets": guard(["owner", "admin"], () => syncGoogleSheets(payload.kind || "manual", payload.payload || payload)),
+      "/api/send-email": guard(staffRoles, async () => {
         const trip = normalizeTrip(payload.trip || {});
-        const result = await sendEmailKind(payload.kind || "confirmation", trip, request);
-        return result;
-      }
+        return sendEmailKind(payload.kind || "confirmation", trip, request);
+      })
     };
 
     const dynamicSendConfirmation = url.pathname.match(/^\/api\/trips\/([^/]+)\/send-confirmation$/);
@@ -739,19 +948,19 @@ async function handleRequest(request, response) {
     const dynamicReconcile = url.pathname.match(/^\/api\/reconciliation\/([^/]+)\/update$/);
 
     let handler = routes[url.pathname];
-    if (dynamicSendConfirmation) handler = async () => {
+    if (dynamicSendConfirmation) handler = guard(staffRoles, async () => {
       const trip = await findTrip(dynamicSendConfirmation[1]);
       if (!trip) return { ok: false, status: 404, message: "Trip not found." };
       return sendEmailKind("confirmation", trip, request);
-    };
-    if (dynamicWaybillEmail) handler = async () => {
+    });
+    if (dynamicWaybillEmail) handler = guard(staffRoles, async () => {
       const trip = await findTrip(dynamicWaybillEmail[1]);
       if (!trip) return { ok: false, status: 404, message: "Trip not found." };
       return sendEmailKind("waybill", trip, request);
-    };
-    if (dynamicManager) handler = () => handleWaybillApproval({ ...payload, tripId: dynamicManager[1] }, "manager");
-    if (dynamicFinance) handler = () => handleWaybillApproval({ ...payload, tripId: dynamicFinance[1] }, "finance");
-    if (dynamicReconcile) handler = () => handleReconciliation({ ...payload, tripId: dynamicReconcile[1] });
+    });
+    if (dynamicManager) handler = guard(["owner", "admin"], (actor) => handleWaybillApproval({ ...payload, tripId: dynamicManager[1] }, "manager", actor));
+    if (dynamicFinance) handler = guard(["accounting", "admin"], (actor) => handleWaybillApproval({ ...payload, tripId: dynamicFinance[1] }, "finance", actor));
+    if (dynamicReconcile) handler = guard(["accounting", "admin"], (actor) => handleReconciliation({ ...payload, tripId: dynamicReconcile[1] }, actor));
 
     if (!handler) return json(response, 404, { ok: false, message: "API route not found." });
     try {

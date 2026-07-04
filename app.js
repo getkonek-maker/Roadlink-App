@@ -279,19 +279,54 @@ function cloneTripForEmail(trip) {
   return JSON.parse(JSON.stringify(trip));
 }
 
+function sessionToken() {
+  return state.session?.accessToken || state.clientSession?.accessToken || "";
+}
+
 async function apiRequest(path, options = {}) {
+  const token = sessionToken();
   const response = await fetch(path, {
     ...options,
     headers: {
       "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(options.headers || {})
     }
   });
   const result = await response.json().catch(() => ({}));
+  if (response.status === 401 && token) {
+    state.session = null;
+    state.clientSession = null;
+    clearStoredSession();
+  }
   if (!response.ok || result.ok === false) {
     throw new Error(result.message || "Roadlink server request failed.");
   }
   return result;
+}
+
+function storedSession() {
+  try {
+    return JSON.parse(localStorage.getItem("roadlinkSession") || "null");
+  } catch {
+    return null;
+  }
+}
+
+function storeSession(session, kind) {
+  try {
+    localStorage.setItem("roadlinkSession", JSON.stringify({ ...session, kind }));
+  } catch {
+    // Session persistence is best-effort; login still works for this tab.
+  }
+}
+
+function clearStoredSession() {
+  try {
+    localStorage.removeItem("roadlinkSession");
+  } catch {
+    // Ignore storage restrictions.
+  }
 }
 
 async function loadServerState() {
@@ -301,10 +336,23 @@ async function loadServerState() {
     state.dataMode = data.mode || "local-demo";
     state.googleSheetsConnected = Boolean(data.googleSheets);
     state.emailConnected = Boolean(data.email);
+  } catch {
+    state.dataMode = "offline-demo";
+  }
+}
+
+async function loadSessionState() {
+  if (!sessionToken()) return;
+  try {
+    const result = await apiRequest("/api/session/bootstrap");
+    const data = result.data || {};
+    state.dataMode = data.mode || state.dataMode;
+    state.googleSheetsConnected = Boolean(data.googleSheets);
+    state.emailConnected = Boolean(data.email);
     if (Array.isArray(data.trips) && data.trips.length) state.trips = data.trips;
-    if (Array.isArray(data.accountRequests)) state.approvalRequests = data.accountRequests;
-    if (Array.isArray(data.bookingRequests)) state.bookingRequests = data.bookingRequests;
-    if (Array.isArray(data.notifications)) state.notifications = data.notifications;
+    if (Array.isArray(data.accountRequests) && data.accountRequests.length) state.approvalRequests = data.accountRequests;
+    if (Array.isArray(data.bookingRequests) && data.bookingRequests.length) state.bookingRequests = data.bookingRequests;
+    if (Array.isArray(data.notifications) && data.notifications.length) state.notifications = data.notifications;
     if (Array.isArray(data.profiles) && data.profiles.length) {
       state.users = data.profiles
         .filter((profile) => profile.role !== "client")
@@ -318,7 +366,7 @@ async function loadServerState() {
         }));
     }
   } catch {
-    state.dataMode = "offline-demo";
+    // Session data stays on local demo values when the server rejects or is unreachable.
   }
 }
 
@@ -504,10 +552,10 @@ function renderLogin() {
 
         <button class="ghost wide" type="button" data-action="accountRequest">Create account request</button>
 
-        <div class="login-hint">
+        ${state.dataMode === "supabase" ? "" : `<div class="login-hint">
           <strong>Demo credentials</strong>
           ${roles.map((role) => `<span>${role.label}: ${role.username} / ${role.password}</span>`).join("")}
-        </div>
+        </div>`}
       </div>
       ${state.toast ? `<div class="toast">${state.toast}</div>` : ""}
     </section>
@@ -530,19 +578,19 @@ function renderClientLogin() {
         <form class="login-form" id="clientLoginForm">
           <div class="field">
             <label for="clientEmail">Client email or username</label>
-            <input id="clientEmail" name="username" autocomplete="username" value="${client.username}" required>
+            <input id="clientEmail" name="username" autocomplete="username" value="${state.dataMode === "supabase" ? "" : client.username}" required>
           </div>
           <div class="field">
             <label for="clientPassword">Password</label>
-            <input id="clientPassword" name="password" type="password" autocomplete="current-password" value="${client.password}" required>
+            <input id="clientPassword" name="password" type="password" autocomplete="current-password" value="${state.dataMode === "supabase" ? "" : client.password}" required>
           </div>
           <button class="primary wide" type="submit">Open client portal</button>
         </form>
 
-        <div class="login-hint">
+        ${state.dataMode === "supabase" ? "" : `<div class="login-hint">
           <strong>Demo client</strong>
           <span>${client.company}: ${client.username} / ${client.password}</span>
-        </div>
+        </div>`}
       </div>
       ${state.toast ? `<div class="toast">${state.toast}</div>` : ""}
     </section>
@@ -1570,8 +1618,8 @@ function handleAction(action) {
     clientLogin: () => navigate("clientLogin"),
     clientBooking: () => navigate("clientBooking"),
     accountRequest: () => navigate("accountRequest"),
-    logout: () => navigate("home"),
-    logoutClient: () => { state.clientSession = null; navigate("home"); },
+    logout: () => { state.session = null; state.role = null; clearStoredSession(); navigate("home"); },
+    logoutClient: () => { state.clientSession = null; clearStoredSession(); navigate("home"); },
     newTrip: () => navigate("newTrip"),
     budget: () => navigate("budget", trip.id),
     clientPreview: () => {
@@ -1604,21 +1652,19 @@ async function loginStaff(event) {
   try {
     const result = await apiRequest("/api/auth/login", { method: "POST", body: JSON.stringify({ role: roleId, username, password }) });
     state.session = result.session;
-  } catch {
-    if (!role || (!matchingUser && username !== role.username)) {
-      setToast("Login details do not match this role");
-      return;
-    }
-
-    if (username === role.username && password !== role.password) {
-      setToast("Login details do not match this role");
+    storeSession(result.session, "staff");
+    await loadSessionState();
+  } catch (error) {
+    const offline = state.dataMode === "offline-demo";
+    if (!offline || !role || (!matchingUser && username !== role.username) || (username === role.username && password !== role.password)) {
+      setToast(error?.message || "Login details do not match this role");
       return;
     }
   }
 
   state.role = roleId;
   if (form.get("remember")) {
-    rememberLogin({ role: roleId, username, password, remember: true });
+    rememberLogin({ role: roleId, username, remember: true });
   } else {
     clearRememberedLogin();
   }
@@ -1971,19 +2017,27 @@ function addUser(event) {
   setToast("Temporary user added");
 }
 
-function loginClient(event) {
+async function loginClient(event) {
   event.preventDefault();
   const form = new FormData(event.currentTarget);
   const username = String(form.get("username") || "").trim();
   const password = String(form.get("password") || "").trim();
-  const client = clientDemoUsers.find((item) => [item.username, item.email].includes(username) && item.password === password);
-  if (!client) {
-    setToast("Client login details do not match the demo account.");
-    return;
+  try {
+    const result = await apiRequest("/api/auth/login", { method: "POST", body: JSON.stringify({ role: "client", username, password }) });
+    state.clientSession = { ...result.session.profile, accessToken: result.session.accessToken };
+    storeSession(result.session, "client");
+    await loadSessionState();
+  } catch (error) {
+    const offline = state.dataMode === "offline-demo";
+    const client = clientDemoUsers.find((item) => [item.username, item.email].includes(username) && item.password === password);
+    if (!offline || !client) {
+      setToast(error?.message || "Client login details do not match.");
+      return;
+    }
+    state.clientSession = client;
   }
-  state.clientSession = client;
   state.screen = "clientPortal";
-  setToast(`Opened ${client.company} portal preview`);
+  setToast(`Opened ${state.clientSession.company} portal`);
 }
 
 async function createClientBookingRequest(event) {
@@ -2072,10 +2126,42 @@ async function convertBookingRequest(requestId) {
 
 async function initApp() {
   await loadServerState();
+
+  const stored = storedSession();
+  if (stored?.accessToken) {
+    if (stored.kind === "client") {
+      state.clientSession = { ...stored.profile, accessToken: stored.accessToken };
+    } else {
+      state.session = stored;
+      state.role = stored.profile?.role || null;
+    }
+    await loadSessionState();
+    if (!sessionToken()) {
+      state.role = null;
+    } else if (state.clientSession) {
+      state.screen = "clientPortal";
+    } else if (state.role) {
+      state.screen = "dashboard";
+    }
+  }
+
   const params = new URLSearchParams(window.location.search);
   const tripId = params.get("trip");
   const clientAction = params.get("clientAction");
-  if (window.location.hash === "#client" && tripId && state.trips.some((trip) => trip.id === tripId)) {
+  if (window.location.hash === "#client" && tripId) {
+    let linkTrip = state.trips.find((trip) => trip.id === tripId);
+    if (!linkTrip) {
+      try {
+        const result = await apiRequest(`/api/client-trip?trip=${encodeURIComponent(tripId)}&token=${encodeURIComponent(params.get("token") || "")}`);
+        linkTrip = result.trip;
+        state.trips.unshift(linkTrip);
+      } catch (error) {
+        state.screen = "home";
+        render();
+        setToast(error?.message || "This client link is invalid or expired.");
+        return;
+      }
+    }
     state.selectedTripId = tripId;
     state.clientPreviewTripId = tripId;
     state.screen = "client";
