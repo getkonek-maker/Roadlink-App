@@ -1710,13 +1710,12 @@ async function approveAccountRequest(requestId) {
       initials: profile.initials || initials(profile.name),
       photo: profile.photo || ""
     });
-  } catch {
-    request.status = "Approved";
-    const username = `${request.name.split(/\s+/)[0].toLowerCase()}.${request.role.split(/\s+/)[0].toLowerCase()}`;
-    const password = `Roadlink-${Math.floor(1000 + Math.random() * 9000)}`;
-    state.users.unshift({ name: request.name, role: request.role, username, password, initials: initials(request.name), photo: "" });
+    setToast(result.email?.ok
+      ? `Approved ${request.email}. Credentials sent by email.`
+      : `Approved ${request.email}. Login: ${result.credentials?.username} / ${result.credentials?.password}`);
+  } catch (error) {
+    setToast(error?.message || `Could not approve ${request.email}. Try again.`);
   }
-  setToast(`Approved ${request.email}. Credentials queued by email.`);
 }
 
 function makeWaybillForTrip(id, form) {

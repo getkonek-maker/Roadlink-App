@@ -401,7 +401,7 @@ async function supabaseFetch(pathname, options = {}) {
   });
   const text = await response.text();
   const payload = text ? JSON.parse(text) : null;
-  if (!response.ok) throw new Error(payload?.message || payload?.error_description || payload?.hint || `Supabase request failed: ${response.status}`);
+  if (!response.ok) throw new Error(payload?.message || payload?.error_description || payload?.msg || payload?.error_code || payload?.hint || `Supabase request failed: ${response.status}`);
   return payload;
 }
 
@@ -703,7 +703,10 @@ async function handleLogin(payload, request) {
       return { ok: true, session: { accessToken: signSession(profile), profile: safeProfile(profile) } };
     } catch (error) {
       recordLoginFailure(throttleKey);
-      return { ok: false, message: error.message || "Supabase login failed." };
+      const detail = String(error.message || "");
+      if (/invalid_credentials|invalid login credentials|invalid_grant/i.test(detail)) return { ok: false, message: "Incorrect email or password." };
+      if (/email_not_confirmed|email not confirmed/i.test(detail)) return { ok: false, message: "This account's email is not confirmed yet. Ask an admin to re-approve the account." };
+      return { ok: false, message: detail || "Supabase login failed." };
     }
   }
 
@@ -844,18 +847,88 @@ async function handleAccountRequest(payload) {
   return { ok: true, request };
 }
 
-async function handleApproveAccount(payload, actor) {
+async function ensureSupabaseAuthUser(email, password) {
+  // Creates the Supabase Auth login, or resets the password if it already exists.
+  try {
+    const created = await supabaseFetch("/auth/v1/admin/users", {
+      method: "POST",
+      body: JSON.stringify({ email, password, email_confirm: true })
+    });
+    if (created?.id) return created.id;
+  } catch (error) {
+    if (!/already|exists|registered/i.test(String(error.message))) throw error;
+  }
+  const found = await supabaseFetch(`/auth/v1/admin/users?email=${encodeURIComponent(email)}`);
+  const users = Array.isArray(found?.users) ? found.users : Array.isArray(found) ? found : [];
+  const user = users.find((item) => item.email === email) || users[0];
+  if (!user?.id) throw new Error(`Could not create or find a Supabase login for ${email}.`);
+  await supabaseFetch(`/auth/v1/admin/users/${user.id}`, {
+    method: "PUT",
+    body: JSON.stringify({ password, email_confirm: true })
+  });
+  return user.id;
+}
+
+function buildCredentialsEmail(accountRequest, tempPassword, origin) {
+  const rows = [["Login email", accountRequest.email], ["Temporary password", tempPassword], ["Role", accountRequest.role]];
+  const table = `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:18px;border:1px solid #d9e0ec;border-radius:12px;overflow:hidden;">${rows.map(([label, value]) => `<tr><td style="padding:10px 12px;background:#f8fafc;border-bottom:1px solid #e5eaf2;color:#5b6472;font-size:12px;font-weight:800;width:38%;">${escapeHtml(label)}</td><td style="padding:10px 12px;border-bottom:1px solid #e5eaf2;color:#111827;font-size:13px;">${escapeHtml(value)}</td></tr>`).join("")}</table>`;
+  const body = `<p style="margin:0 0 12px;line-height:1.6;">Dear ${escapeHtml(accountRequest.name)},</p><p style="margin:0 0 12px;line-height:1.6;">Your Roadlink Trip Control account has been approved. Use the details below to log in, then change your password as soon as possible.</p>${table}`;
+  return {
+    to: [accountRequest.email],
+    subject: "Your Roadlink Trip Control account is ready",
+    html: roadlinkEmailShell({ title: "Your account is ready", preview: "Roadlink Trip Control login details", body, actions: [{ label: "Open Roadlink Trip Control", url: origin }], trip: null }),
+    text: `Dear ${accountRequest.name},\n\nYour Roadlink Trip Control account has been approved.\n\nLogin email: ${accountRequest.email}\nTemporary password: ${tempPassword}\nRole: ${accountRequest.role}\n\nLog in at ${origin} and change your password as soon as possible.\n\nRoadlink Cargo Transport Service\nPowered by Konek`
+  };
+}
+
+async function handleApproveAccount(payload, actor, httpRequest) {
   const request = (await tableList("account_requests")).find((item) => item.id === payload.requestId);
   if (!request) return { ok: false, status: 404, message: "Request not found." };
   if (request.status === "Approved") return { ok: false, status: 409, message: "This request was already approved." };
-  const username = `${request.name.split(/\s+/)[0].toLowerCase()}.${String(request.role).split(/\s+/)[0].toLowerCase()}`;
-  const tempPassword = `Roadlink-${Math.floor(1000 + Math.random() * 9000)}`;
+  const tempPassword = `Roadlink-${randomBytes(4).toString("hex")}`;
   const role = roleSlug(request.role);
-  const profile = { id: `USR-${Date.now()}`, name: request.name, email: request.email, role, roleLabel: request.role, username, passwordHash: hashPassword(tempPassword), company: request.company || "Roadlink", phone: request.phone || "", status: "active", initials: initials(request.name), photo: "" };
+  const loginName = supabaseConfigured() ? request.email : `${request.name.split(/\s+/)[0].toLowerCase()}.${String(request.role).split(/\s+/)[0].toLowerCase()}`;
+
+  let authUserId = null;
+  if (supabaseConfigured()) {
+    try {
+      authUserId = await ensureSupabaseAuthUser(request.email, tempPassword);
+    } catch (error) {
+      return { ok: false, status: 502, message: `Could not create the Supabase login for ${request.email}: ${error.message}` };
+    }
+  }
+
+  const profiles = await tableList("profiles");
+  const existing = profiles.find((item) => item.email === request.email);
+  const profile = {
+    id: existing?.id || `USR-${Date.now()}`,
+    auth_user_id: authUserId || existing?.auth_user_id || null,
+    name: request.name,
+    email: request.email,
+    role,
+    roleLabel: request.role,
+    username: loginName,
+    passwordHash: hashPassword(tempPassword),
+    company: request.company || "Roadlink",
+    phone: request.phone || "",
+    status: "active",
+    initials: initials(request.name),
+    photo: existing?.photo || ""
+  };
+  if (existing) await tableUpdate("profiles", existing.id, profile);
+  else await tableInsert("profiles", profile);
+
   await tableUpdate("account_requests", request.id, { status: "Approved", approvedAt: nowStamp() });
-  await tableInsert("profiles", profile);
   await addAudit({ actor: actor?.name || "Admin", action: "account_approved", detail: `${request.email} approved as ${request.role}` });
-  return { ok: true, request: { ...request, status: "Approved" }, profile: safeProfile(profile), credentials: { username, password: tempPassword } };
+
+  let emailResult = { ok: false, skipped: true, message: "Email service is not configured." };
+  if (httpRequest) {
+    const proto = httpRequest.headers["x-forwarded-proto"] || "http";
+    const origin = `${proto}://${httpRequest.headers.host}`;
+    emailResult = await sendViaResend(buildCredentialsEmail(request, tempPassword, origin), "credentials", null).catch((error) => ({ ok: false, message: error.message }));
+  }
+
+  return { ok: true, request: { ...request, status: "Approved" }, profile: safeProfile(profile), credentials: { username: loginName, password: tempPassword }, email: emailResult };
 }
 
 function roleSlug(label = "") {
@@ -925,7 +998,7 @@ async function handleRequest(request, response) {
     const routes = {
       "/api/auth/login": () => handleLogin(payload, request),
       "/api/auth/account-request": () => handleAccountRequest(payload),
-      "/api/admin/approve-account": guard(["admin", "owner"], (actor) => handleApproveAccount(payload, actor)),
+      "/api/admin/approve-account": guard(["admin", "owner"], (actor) => handleApproveAccount(payload, actor, request)),
       "/api/trips": guard(["coordinator", "owner", "admin"], (actor) => handleCreateTrip(payload, request, actor)),
       "/api/client-action": () => handleClientAction(payload),
       "/api/budget-items": guard(["accounting", "admin"], (actor) => handleBudget(payload, actor)),
