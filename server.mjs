@@ -1,6 +1,6 @@
 import { createReadStream, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
-import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
 import { dirname, extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -673,6 +673,18 @@ async function sendEmailKind(kind, trip, request) {
   return sendViaResend(email, kind, trip);
 }
 
+function passwordMatches(profile, password) {
+  if (!profile?.passwordHash || !password) return false;
+  const given = Buffer.from(hashPassword(password));
+  const stored = Buffer.from(String(profile.passwordHash));
+  return given.length === stored.length && timingSafeEqual(given, stored);
+}
+
+function passwordPolicyError(password) {
+  if (String(password || "").length < 8) return "Password must be at least 8 characters.";
+  return "";
+}
+
 async function handleLogin(payload, request) {
   const username = String(payload.username || payload.email || "").trim();
   const password = String(payload.password || "").trim();
@@ -680,44 +692,128 @@ async function handleLogin(payload, request) {
   const clientIp = request?.headers["x-forwarded-for"]?.split(",")[0]?.trim() || request?.socket?.remoteAddress || "unknown";
   const throttleKey = `${clientIp}:${username.toLowerCase()}`;
   if (loginThrottled(throttleKey)) return { ok: false, status: 429, message: "Too many login attempts. Try again in 15 minutes." };
+  if (!username || !password) return { ok: false, status: 400, message: "Enter your email and password." };
 
-  if (supabaseConfigured() && username.includes("@")) {
-    try {
-      const auth = await supabaseFetch("/auth/v1/token?grant_type=password", {
-        method: "POST",
-        headers: { apikey: process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY}` },
-        body: JSON.stringify({ email: username, password })
-      });
-      const profiles = await tableList("profiles");
-      const profile = profiles.find((item) => item.email === username);
-      if (!profile || profile.status !== "active") {
-        recordLoginFailure(throttleKey);
-        return { ok: false, status: 403, message: "No active Roadlink profile is linked to this account. Ask an admin to set one up." };
-      }
-      if (requestedRole && requestedRole !== profile.role) {
-        recordLoginFailure(throttleKey);
-        return { ok: false, message: "Login details do not match this role." };
-      }
-      loginAttempts.delete(throttleKey);
-      void auth;
-      return { ok: true, session: { accessToken: signSession(profile), profile: safeProfile(profile) } };
-    } catch (error) {
-      recordLoginFailure(throttleKey);
-      const detail = String(error.message || "");
-      if (/invalid_credentials|invalid login credentials|invalid_grant/i.test(detail)) return { ok: false, message: "Incorrect email or password." };
-      if (/email_not_confirmed|email not confirmed/i.test(detail)) return { ok: false, message: "This account's email is not confirmed yet. Ask an admin to re-approve the account." };
-      return { ok: false, message: detail || "Supabase login failed." };
-    }
-  }
-
+  const identifier = username.toLowerCase();
   const profiles = await tableList("profiles");
-  const profile = profiles.find((item) => item.username === username && item.status === "active" && item.passwordHash === hashPassword(password));
-  if (!profile || (requestedRole && requestedRole !== profile.role)) {
+  const profile = profiles.find((item) =>
+    String(item.email || "").toLowerCase() === identifier || String(item.username || "").toLowerCase() === identifier);
+
+  if (!profile || profile.status !== "active" || !passwordMatches(profile, password)) {
     recordLoginFailure(throttleKey);
-    return { ok: false, message: "Login details do not match this role." };
+    return { ok: false, status: 401, message: "Incorrect email or password. Use Forgot password if you need to reset it." };
+  }
+  if (requestedRole && requestedRole !== profile.role) {
+    recordLoginFailure(throttleKey);
+    return { ok: false, status: 403, message: `This account is registered as ${profile.roleLabel || profile.role}. Pick that role on the login screen and try again.` };
   }
   loginAttempts.delete(throttleKey);
   return { ok: true, session: { accessToken: signSession(profile), profile: safeProfile(profile) } };
+}
+
+// In-memory reset codes: fine for a single Render instance; codes live 15 minutes.
+const resetCodes = new Map();
+
+function buildResetCodeEmail(profile, code) {
+  const body = `<p style="margin:0 0 12px;line-height:1.6;">Dear ${escapeHtml(profile.name)},</p><p style="margin:0 0 12px;line-height:1.6;">Use this one-time code to reset your Roadlink Trip Control password. It expires in 15 minutes.</p><div style="margin:18px 0;padding:18px;border:1px solid #d9e0ec;border-radius:12px;background:#f8fafc;text-align:center;font-size:32px;font-weight:900;letter-spacing:.35em;color:#101a68;">${escapeHtml(code)}</div><p style="margin:0;line-height:1.6;color:#5b6472;">If you did not request this, you can ignore this email — your password stays the same.</p>`;
+  return {
+    to: [profile.email],
+    subject: "Your Roadlink password reset code",
+    html: roadlinkEmailShell({ title: "Password reset code", preview: "Your one-time Roadlink reset code", body, actions: [], trip: null }),
+    text: `Dear ${profile.name},\n\nYour Roadlink Trip Control password reset code is: ${code}\n\nIt expires in 15 minutes. If you did not request this, ignore this email.\n\nRoadlink Cargo Transport Service\nPowered by Konek`
+  };
+}
+
+async function handleForgotPassword(payload) {
+  const email = String(payload.email || "").trim().toLowerCase();
+  if (!email.includes("@")) return { ok: false, status: 400, message: "Enter the email address on your Roadlink account." };
+  const generic = { ok: true, message: "If that email has a Roadlink account, a reset code is on its way. Check your inbox and spam folder." };
+  const profiles = await tableList("profiles");
+  const profile = profiles.find((item) => String(item.email || "").toLowerCase() === email && item.status === "active");
+  if (!profile) return generic;
+
+  const code = String(randomInt(100000, 1000000));
+  resetCodes.set(email, { codeHash: hashPassword(code), expiresAt: Date.now() + 15 * 60 * 1000, attempts: 0 });
+  const emailResult = await sendViaResend(buildResetCodeEmail(profile, code), "password_reset", null).catch((error) => ({ ok: false, message: error.message }));
+  if (!emailResult.ok) {
+    resetCodes.delete(email);
+    return { ok: false, status: 502, message: `Could not send the reset email (${emailResult.message || "email service unavailable"}). Ask an owner or admin to reset your password from the Users screen instead.` };
+  }
+  await addAudit({ actor: profile.name, action: "password_reset_requested", detail: `Reset code emailed to ${email}` });
+  return generic;
+}
+
+async function handleResetPassword(payload) {
+  const email = String(payload.email || "").trim().toLowerCase();
+  const code = String(payload.code || "").trim();
+  const password = String(payload.password || "");
+  const policyError = passwordPolicyError(password);
+  if (policyError) return { ok: false, status: 400, message: policyError };
+
+  const entry = resetCodes.get(email);
+  if (!entry || entry.expiresAt < Date.now()) {
+    resetCodes.delete(email);
+    return { ok: false, status: 400, message: "This reset code is invalid or expired. Request a new one." };
+  }
+  entry.attempts += 1;
+  if (entry.attempts > 5) {
+    resetCodes.delete(email);
+    return { ok: false, status: 429, message: "Too many wrong attempts. Request a new reset code." };
+  }
+  if (entry.codeHash !== hashPassword(code)) return { ok: false, status: 400, message: "That code does not match. Check the email and try again." };
+
+  const profiles = await tableList("profiles");
+  const profile = profiles.find((item) => String(item.email || "").toLowerCase() === email && item.status === "active");
+  if (!profile) return { ok: false, status: 404, message: "No active account uses that email." };
+  await tableUpdate("profiles", profile.id, { passwordHash: hashPassword(password) });
+  resetCodes.delete(email);
+  await addAudit({ actor: profile.name, action: "password_reset", detail: `${email} reset their password with an emailed code` });
+  return { ok: true, message: "Password updated. Log in with your new password." };
+}
+
+async function handleChangePassword(payload, actor) {
+  const currentPassword = String(payload.currentPassword || "");
+  const newPassword = String(payload.newPassword || "");
+  const policyError = passwordPolicyError(newPassword);
+  if (policyError) return { ok: false, status: 400, message: policyError };
+  const profiles = await tableList("profiles");
+  const profile = profiles.find((item) => item.id === actor.id);
+  if (!profile || !passwordMatches(profile, currentPassword)) return { ok: false, status: 403, message: "Current password is incorrect." };
+  await tableUpdate("profiles", profile.id, { passwordHash: hashPassword(newPassword) });
+  await addAudit({ actor: profile.name, action: "password_changed", detail: `${profile.email} changed their password` });
+  return { ok: true, message: "Password changed." };
+}
+
+async function handleAdminResetPassword(payload, actor, httpRequest) {
+  const profiles = await tableList("profiles");
+  const profile = profiles.find((item) => item.id === payload.profileId);
+  if (!profile) return { ok: false, status: 404, message: "User not found." };
+  const tempPassword = `Roadlink-${randomBytes(4).toString("hex")}`;
+  await tableUpdate("profiles", profile.id, { passwordHash: hashPassword(tempPassword) });
+  await addAudit({ actor: actor?.name || "Admin", action: "password_admin_reset", detail: `${actor?.name || "Admin"} issued a new temporary password for ${profile.email}` });
+
+  let emailResult = { ok: false, skipped: true, message: "Email service is not configured." };
+  if (httpRequest) {
+    const proto = httpRequest.headers["x-forwarded-proto"] || "http";
+    const origin = `${proto}://${httpRequest.headers.host}`;
+    emailResult = await sendViaResend(
+      buildCredentialsEmail({ name: profile.name, email: profile.email, role: profile.roleLabel || profile.role }, tempPassword, origin),
+      "credentials",
+      null
+    ).catch((error) => ({ ok: false, message: error.message }));
+  }
+  return { ok: true, credentials: { username: profile.username || profile.email, password: tempPassword }, email: emailResult };
+}
+
+async function handleSetUserStatus(payload, actor) {
+  const status = payload.status === "suspended" ? "suspended" : "active";
+  if (payload.profileId === actor.id) return { ok: false, status: 400, message: "You cannot suspend your own account." };
+  const profiles = await tableList("profiles");
+  const profile = profiles.find((item) => item.id === payload.profileId);
+  if (!profile) return { ok: false, status: 404, message: "User not found." };
+  await tableUpdate("profiles", profile.id, { status });
+  await addAudit({ actor: actor?.name || "Admin", action: status === "suspended" ? "user_suspended" : "user_activated", detail: `${profile.email} set to ${status}` });
+  return { ok: true, profile: safeProfile({ ...profile, status }) };
 }
 
 async function handleCreateTrip(payload, request, actor) {
@@ -841,32 +937,26 @@ async function handleReconciliation(payload, actor) {
 }
 
 async function handleAccountRequest(payload) {
-  const request = { id: `REQ-${Math.floor(1200 + Math.random() * 8000)}`, name: payload.name, email: payload.email, role: payload.role, company: payload.company || "Roadlink", phone: payload.phone || "", status: "Pending", requestedAt: nowStamp() };
+  const name = String(payload.name || "").trim();
+  const email = String(payload.email || "").trim().toLowerCase();
+  const roleLabel = String(payload.role || "Coordinator").trim();
+  const company = String(payload.company || "").trim();
+  if (!name || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { ok: false, status: 400, message: "Enter your real name and a valid email address." };
+  if (roleSlug(roleLabel) === "client" && !company) return { ok: false, status: 400, message: "Client accounts need a company name so we can match your bookings." };
+
+  const [profiles, requests] = await Promise.all([tableList("profiles"), tableList("account_requests")]);
+  if (profiles.some((item) => String(item.email || "").toLowerCase() === email && item.status === "active")) {
+    return { ok: false, status: 409, message: "An account with this email already exists. Use Forgot password on the login screen instead." };
+  }
+  if (requests.some((item) => String(item.email || "").toLowerCase() === email && item.status === "Pending")) {
+    return { ok: false, status: 409, message: "A request for this email is already waiting for approval." };
+  }
+
+  const request = { id: `REQ-${Math.floor(1200 + Math.random() * 8000)}`, name, email, role: roleLabel, company: company || "Roadlink", phone: payload.phone || "", status: "Pending", requestedAt: nowStamp() };
   await tableInsert("account_requests", request);
   await addNotification({ role: "admin", title: "Account request", body: `${request.name} requested ${request.role} access.` });
+  await addNotification({ role: "owner", title: "Account request", body: `${request.name} requested ${request.role} access.` });
   return { ok: true, request };
-}
-
-async function ensureSupabaseAuthUser(email, password) {
-  // Creates the Supabase Auth login, or resets the password if it already exists.
-  try {
-    const created = await supabaseFetch("/auth/v1/admin/users", {
-      method: "POST",
-      body: JSON.stringify({ email, password, email_confirm: true })
-    });
-    if (created?.id) return created.id;
-  } catch (error) {
-    if (!/already|exists|registered/i.test(String(error.message))) throw error;
-  }
-  const found = await supabaseFetch(`/auth/v1/admin/users?email=${encodeURIComponent(email)}`);
-  const users = Array.isArray(found?.users) ? found.users : Array.isArray(found) ? found : [];
-  const user = users.find((item) => item.email === email) || users[0];
-  if (!user?.id) throw new Error(`Could not create or find a Supabase login for ${email}.`);
-  await supabaseFetch(`/auth/v1/admin/users/${user.id}`, {
-    method: "PUT",
-    body: JSON.stringify({ password, email_confirm: true })
-  });
-  return user.id;
 }
 
 function buildCredentialsEmail(accountRequest, tempPassword, origin) {
@@ -887,22 +977,13 @@ async function handleApproveAccount(payload, actor, httpRequest) {
   if (request.status === "Approved") return { ok: false, status: 409, message: "This request was already approved." };
   const tempPassword = `Roadlink-${randomBytes(4).toString("hex")}`;
   const role = roleSlug(request.role);
-  const loginName = supabaseConfigured() ? request.email : `${request.name.split(/\s+/)[0].toLowerCase()}.${String(request.role).split(/\s+/)[0].toLowerCase()}`;
-
-  let authUserId = null;
-  if (supabaseConfigured()) {
-    try {
-      authUserId = await ensureSupabaseAuthUser(request.email, tempPassword);
-    } catch (error) {
-      return { ok: false, status: 502, message: `Could not create the Supabase login for ${request.email}: ${error.message}` };
-    }
-  }
+  const loginName = request.email;
 
   const profiles = await tableList("profiles");
   const existing = profiles.find((item) => item.email === request.email);
   const profile = {
     id: existing?.id || `USR-${Date.now()}`,
-    auth_user_id: authUserId || existing?.auth_user_id || null,
+    auth_user_id: existing?.auth_user_id || null,
     name: request.name,
     email: request.email,
     role,
@@ -998,7 +1079,12 @@ async function handleRequest(request, response) {
     const routes = {
       "/api/auth/login": () => handleLogin(payload, request),
       "/api/auth/account-request": () => handleAccountRequest(payload),
+      "/api/auth/forgot-password": () => handleForgotPassword(payload),
+      "/api/auth/reset-password": () => handleResetPassword(payload),
+      "/api/auth/change-password": guard([], (actor) => handleChangePassword(payload, actor)),
       "/api/admin/approve-account": guard(["admin", "owner"], (actor) => handleApproveAccount(payload, actor, request)),
+      "/api/admin/reset-user-password": guard(["admin", "owner"], (actor) => handleAdminResetPassword(payload, actor, request)),
+      "/api/admin/set-user-status": guard(["admin", "owner"], (actor) => handleSetUserStatus(payload, actor)),
       "/api/trips": guard(["coordinator", "owner", "admin"], (actor) => handleCreateTrip(payload, request, actor)),
       "/api/client-action": () => handleClientAction(payload),
       "/api/budget-items": guard(["accounting", "admin"], (actor) => handleBudget(payload, actor)),

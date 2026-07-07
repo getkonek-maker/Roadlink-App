@@ -349,21 +349,26 @@ async function loadSessionState() {
     state.dataMode = data.mode || state.dataMode;
     state.googleSheetsConnected = Boolean(data.googleSheets);
     state.emailConnected = Boolean(data.email);
-    if (Array.isArray(data.trips) && data.trips.length) state.trips = data.trips;
-    if (Array.isArray(data.accountRequests) && data.accountRequests.length) state.approvalRequests = data.accountRequests;
-    if (Array.isArray(data.bookingRequests) && data.bookingRequests.length) state.bookingRequests = data.bookingRequests;
-    if (Array.isArray(data.notifications) && data.notifications.length) state.notifications = data.notifications;
-    if (Array.isArray(data.profiles) && data.profiles.length) {
-      state.users = data.profiles
-        .filter((profile) => profile.role !== "client")
-        .map((profile) => ({
-          name: profile.name,
-          role: profile.roleLabel || roleLabelFromId(profile.role),
-          username: profile.username || profile.email,
-          password: profile.username?.endsWith(".temp") ? demoPasswordForRole(profile.role) : "Managed by server",
-          initials: profile.initials || initials(profile.name),
-          photo: profile.photo || ""
-        }));
+    // In production mode the server is the source of truth, even when a list is empty —
+    // otherwise demo seed data lingers on screen.
+    const authoritative = state.dataMode === "supabase";
+    if (Array.isArray(data.trips) && (authoritative || data.trips.length)) state.trips = data.trips;
+    if (Array.isArray(data.accountRequests) && (authoritative || data.accountRequests.length)) state.approvalRequests = data.accountRequests;
+    if (Array.isArray(data.bookingRequests) && (authoritative || data.bookingRequests.length)) state.bookingRequests = data.bookingRequests;
+    if (Array.isArray(data.notifications) && (authoritative || data.notifications.length)) state.notifications = data.notifications;
+    if (Array.isArray(data.profiles) && (authoritative || data.profiles.length)) {
+      state.users = data.profiles.map((profile) => ({
+        id: profile.id,
+        name: profile.name,
+        role: profile.roleLabel || roleLabelFromId(profile.role),
+        roleId: profile.role,
+        email: profile.email || "",
+        status: profile.status || "active",
+        username: profile.username || profile.email,
+        password: profile.username?.endsWith(".temp") && !authoritative ? demoPasswordForRole(profile.role) : "",
+        initials: profile.initials || initials(profile.name),
+        photo: profile.photo || ""
+      }));
     }
   } catch {
     // Session data stays on local demo values when the server rejects or is unreachable.
@@ -433,14 +438,14 @@ function clearRememberedLogin() {
   }
 }
 
-function setToast(message) {
+function setToast(message, duration = 2600) {
   state.toast = message;
   render();
   window.clearTimeout(setToast.timer);
   setToast.timer = window.setTimeout(() => {
     state.toast = "";
     render();
-  }, 2600);
+  }, duration);
 }
 
 function navigate(screen, tripId) {
@@ -460,6 +465,7 @@ function render() {
   const views = {
     home: renderHome,
     login: renderLogin,
+    forgotPassword: renderForgotPassword,
     clientLogin: renderClientLogin,
     clientPortal: renderClientPortal,
     clientBooking: renderClientBookingRequest,
@@ -504,8 +510,8 @@ function renderHome() {
         <img class="home-logo" src="assets/roadlink-logo-home.svg" alt="Roadlink Cargo Transport Service">
         <div class="home-actions">
           <button class="primary wide home-login" type="button" data-action="login">Staff log in</button>
-          <button class="ghost wide home-client-login" type="button" data-action="clientLogin">Client portal preview</button>
-          <span>${state.dataMode === "supabase" ? "Production Pilot" : "Demo Mode"}</span>
+          <button class="ghost wide home-client-login" type="button" data-action="clientLogin">${state.dataMode === "supabase" ? "Client portal" : "Client portal preview"}</button>
+          <span>${state.dataMode === "supabase" ? "Production" : "Demo Mode"}</span>
         </div>
       </div>
       ${state.toast ? `<div class="toast">${state.toast}</div>` : ""}
@@ -536,12 +542,12 @@ function renderLogin() {
             </select>
           </div>
           <div class="field">
-            <label for="loginUsername">Username</label>
-            <input id="loginUsername" name="username" autocomplete="username" value="${remembered.username || ""}" placeholder="mika.temp">
+            <label for="loginUsername">Email or username</label>
+            <input id="loginUsername" name="username" autocomplete="username" value="${remembered.username || ""}" placeholder="you@roadlink.com">
           </div>
           <div class="field">
             <label for="loginPassword">Password</label>
-            <input id="loginPassword" name="password" type="password" autocomplete="current-password" value="${remembered.password || ""}" placeholder="Roadlink-8421">
+            <input id="loginPassword" name="password" type="password" autocomplete="current-password" value="${remembered.password || ""}" placeholder="Your password">
           </div>
           <label class="remember-row">
             <input name="remember" type="checkbox" ${remembered.remember ? "checked" : ""}>
@@ -550,6 +556,7 @@ function renderLogin() {
           <button class="primary wide" type="submit">Log in</button>
         </form>
 
+        <button class="ghost wide" type="button" data-action="forgotPassword">Forgot password?</button>
         <button class="ghost wide" type="button" data-action="accountRequest">Create account request</button>
 
         ${state.dataMode === "supabase" ? "" : `<div class="login-hint">
@@ -562,32 +569,80 @@ function renderLogin() {
   `;
 }
 
+function renderForgotPassword() {
+  const stage = state.resetStage || "email";
+  return `
+    <section class="screen auth-screen">
+      <button class="tiny-btn auth-back" type="button" data-action="login">Back</button>
+      <div class="auth-panel">
+        <img class="auth-logo" src="assets/roadlink-logo.svg" alt="Roadlink Cargo Transport Service">
+        <div>
+          <p class="eyebrow">Password Reset</p>
+          <h1>${stage === "email" ? "Forgot your password?" : "Enter your reset code"}</h1>
+          <p>${stage === "email"
+            ? "Enter your account email and we will send you a 6-digit reset code."
+            : `We sent a 6-digit code to ${state.resetEmail}. Enter it below with your new password.`}</p>
+        </div>
+
+        ${stage === "email" ? `
+          <form class="login-form" id="forgotForm">
+            <div class="field">
+              <label for="resetEmail">Account email</label>
+              <input id="resetEmail" name="email" type="email" autocomplete="email" value="${state.resetEmail || ""}" required>
+            </div>
+            <button class="primary wide" type="submit">Send reset code</button>
+          </form>
+        ` : `
+          <form class="login-form" id="resetForm">
+            <div class="field">
+              <label for="resetCode">6-digit code</label>
+              <input id="resetCode" name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" placeholder="123456" required>
+            </div>
+            <div class="field">
+              <label for="resetNewPassword">New password</label>
+              <input id="resetNewPassword" name="password" type="password" autocomplete="new-password" minlength="8" placeholder="At least 8 characters" required>
+            </div>
+            <button class="primary wide" type="submit">Set new password</button>
+          </form>
+          <button class="ghost wide" type="button" data-action="forgotPassword">Resend code / change email</button>
+        `}
+      </div>
+      ${state.toast ? `<div class="toast">${state.toast}</div>` : ""}
+    </section>
+  `;
+}
+
 function renderClientLogin() {
   const client = clientDemoUsers[0];
+  const production = state.dataMode === "supabase";
   return `
     <section class="screen auth-screen client-auth-screen">
       <button class="tiny-btn auth-back" type="button" data-action="home">Back</button>
       <div class="auth-panel">
         <img class="auth-logo" src="assets/roadlink-logo.svg" alt="Roadlink Cargo Transport Service">
         <div>
-          <p class="eyebrow">Client Portal Preview</p>
+          <p class="eyebrow">${production ? "Client Portal" : "Client Portal Preview"}</p>
           <h1>Track your Roadlink bookings</h1>
-          <p>For demo only: clients can request trips, confirm pending bookings, and see simple trip summaries without internal budget details.</p>
+          <p>${production
+            ? "Request trips, confirm pending bookings, and follow your shipment status. No account yet? Ask Roadlink for client portal access."
+            : "For demo only: clients can request trips, confirm pending bookings, and see simple trip summaries without internal budget details."}</p>
         </div>
 
         <form class="login-form" id="clientLoginForm">
           <div class="field">
             <label for="clientEmail">Client email or username</label>
-            <input id="clientEmail" name="username" autocomplete="username" value="${state.dataMode === "supabase" ? "" : client.username}" required>
+            <input id="clientEmail" name="username" autocomplete="username" value="${production ? "" : client.username}" required>
           </div>
           <div class="field">
             <label for="clientPassword">Password</label>
-            <input id="clientPassword" name="password" type="password" autocomplete="current-password" value="${state.dataMode === "supabase" ? "" : client.password}" required>
+            <input id="clientPassword" name="password" type="password" autocomplete="current-password" value="${production ? "" : client.password}" required>
           </div>
           <button class="primary wide" type="submit">Open client portal</button>
         </form>
 
-        ${state.dataMode === "supabase" ? "" : `<div class="login-hint">
+        <button class="ghost wide" type="button" data-action="forgotPassword">Forgot password?</button>
+
+        ${production ? "" : `<div class="login-hint">
           <strong>Demo client</strong>
           <span>${client.company}: ${client.username} / ${client.password}</span>
         </div>`}
@@ -616,7 +671,7 @@ function renderClientPortal() {
       ${topbar("Client Portal", `<button class="tiny-btn" type="button" data-action="logoutClient">Exit</button>`)}
       <div class="client-portal-hero">
         <img src="assets/roadlink-logo-light.svg" alt="Roadlink Cargo Transport Service">
-        <span>Preview account</span>
+        <span>${state.dataMode === "supabase" ? "Client account" : "Preview account"}</span>
         <h1>${client.company}</h1>
         <p>Simple booking visibility for authorized client contacts.</p>
       </div>
@@ -775,11 +830,11 @@ function renderAccountRequest() {
         <form class="login-form" id="accountRequestForm">
           <div class="field">
             <label for="requestName">Full name</label>
-            <input id="requestName" name="name" value="New Roadlink Staff" required>
+            <input id="requestName" name="name" placeholder="Juan Dela Cruz" required>
           </div>
           <div class="field">
             <label for="requestEmail">Email</label>
-            <input id="requestEmail" name="email" type="email" value="staff@roadlink.example" required>
+            <input id="requestEmail" name="email" type="email" placeholder="you@company.com" required>
           </div>
           <div class="field">
             <label for="requestRole">Requested role</label>
@@ -788,7 +843,12 @@ function renderAccountRequest() {
               <option>Accounting</option>
               <option>Owner / Manager</option>
               <option>Admin</option>
+              <option>Client</option>
             </select>
+          </div>
+          <div class="field">
+            <label for="requestCompany">Company <small>(required for client accounts)</small></label>
+            <input id="requestCompany" name="company" placeholder="Your company name">
           </div>
           <button class="primary wide" type="submit">Send approval request</button>
         </form>
@@ -1384,20 +1444,32 @@ function renderAudit() {
 }
 
 function renderUsers() {
+  const production = state.dataMode === "supabase";
+  const isUserAdmin = ["owner", "admin"].includes(state.role);
+  const issued = state.lastIssuedCredentials;
+
   return `
     <section class="screen">
       ${topbar("Users")}
       <div class="content">
-        <article class="card">
-          <strong>Temporary access</strong>
-          <span>Owner, manager, or admin can add staff, assign roles, attach a photo, and issue a temporary username/password.</span>
-        </article>
+        ${issued ? `
+          <article class="card" style="border:2px solid #0fba81;">
+            <strong>New credentials for ${issued.name}</strong>
+            <span>Login: <b>${issued.username}</b></span>
+            <span>Temporary password: <b>${issued.password}</b></span>
+            <small>${issued.emailOk ? "Also sent by email." : "Email delivery failed — copy these and send them over Viber/SMS."} Ask them to change the password after first login.</small>
+            <div class="actions">
+              <button class="secondary" type="button" data-copy-credentials="1">Copy credentials</button>
+              <button class="ghost" type="button" data-dismiss-credentials="1">Dismiss</button>
+            </div>
+          </article>
+        ` : ""}
 
         <article class="card">
           <div class="section-head">
             <div>
               <h3>Account approvals</h3>
-              <p>Requests from staff accounts before credentials are issued.</p>
+              <p>Approving a request creates the login and issues a temporary password instantly.</p>
             </div>
             <span class="pill">${state.approvalRequests.filter((request) => request.status === "Pending").length} pending</span>
           </div>
@@ -1413,10 +1485,23 @@ function renderUsers() {
                   ? `<button class="secondary" type="button" data-approve-request="${request.id}">Approve</button>`
                   : `<span class="status-pill confirmed">Approved</span>`}
               </div>
-            `).join("")}
+            `).join("") || `<span class="muted">No account requests yet.</span>`}
           </div>
         </article>
 
+        <form class="form-card" id="changePasswordForm">
+          <div class="field">
+            <label for="currentPassword">Current password</label>
+            <input id="currentPassword" name="currentPassword" type="password" autocomplete="current-password" required>
+          </div>
+          <div class="field">
+            <label for="newPassword">New password</label>
+            <input id="newPassword" name="newPassword" type="password" autocomplete="new-password" minlength="8" placeholder="At least 8 characters" required>
+          </div>
+          <button class="primary wide" type="submit">Change my password</button>
+        </form>
+
+        ${production ? "" : `
         <form class="form-card" id="userForm">
           <div class="avatar-upload">
             <span class="user-photo large">${state.newUserPhoto ? `<img src="${state.newUserPhoto}" alt="">` : "PH"}</span>
@@ -1445,7 +1530,7 @@ function renderUsers() {
             <input id="password" name="password" value="Roadlink-7782">
           </div>
           <button class="primary wide" type="submit">Add demo user</button>
-        </form>
+        </form>`}
 
         <div class="cards">
           ${state.users.map((user) => `
@@ -1453,8 +1538,16 @@ function renderUsers() {
               <span class="user-photo">${user.photo ? `<img src="${user.photo}" alt="">` : user.initials}</span>
               <div>
                 <strong>${user.name}</strong>
-                <span>${user.role}</span>
-                <small>${user.username} / ${user.password}</small>
+                <span>${user.role}${user.status === "suspended" ? " • Suspended" : ""}</span>
+                <small>${user.username}${user.password ? ` / ${user.password}` : ""}</small>
+                ${isUserAdmin && user.id && user.id !== state.session?.profile?.id ? `
+                  <div class="actions" style="margin-top:8px;">
+                    <button class="secondary" type="button" data-reset-user="${user.id}">Reset password</button>
+                    ${user.status === "suspended"
+                      ? `<button class="ghost" type="button" data-activate-user="${user.id}">Activate</button>`
+                      : `<button class="ghost" type="button" data-suspend-user="${user.id}">Suspend</button>`}
+                  </div>
+                ` : ""}
               </div>
             </article>
           `).join("")}
@@ -1542,6 +1635,47 @@ function bindScreenEvents() {
   const loginForm = document.querySelector("#loginForm");
   if (loginForm) loginForm.addEventListener("submit", loginStaff);
 
+  const forgotForm = document.querySelector("#forgotForm");
+  if (forgotForm) forgotForm.addEventListener("submit", requestResetCode);
+
+  const resetForm = document.querySelector("#resetForm");
+  if (resetForm) resetForm.addEventListener("submit", submitPasswordReset);
+
+  const changePasswordForm = document.querySelector("#changePasswordForm");
+  if (changePasswordForm) changePasswordForm.addEventListener("submit", changeOwnPassword);
+
+  document.querySelectorAll("[data-reset-user]").forEach((button) => {
+    button.addEventListener("click", () => adminResetUserPassword(button.dataset.resetUser));
+  });
+
+  document.querySelectorAll("[data-suspend-user]").forEach((button) => {
+    button.addEventListener("click", () => setUserStatus(button.dataset.suspendUser, "suspended"));
+  });
+
+  document.querySelectorAll("[data-activate-user]").forEach((button) => {
+    button.addEventListener("click", () => setUserStatus(button.dataset.activateUser, "active"));
+  });
+
+  document.querySelectorAll("[data-copy-credentials]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const issued = state.lastIssuedCredentials;
+      if (!issued) return;
+      try {
+        await navigator.clipboard.writeText(`Roadlink Trip Control login\nLogin: ${issued.username}\nTemporary password: ${issued.password}\nApp: ${window.location.origin}`);
+        setToast("Credentials copied to clipboard.");
+      } catch {
+        setToast("Could not copy automatically. Copy the details manually.");
+      }
+    });
+  });
+
+  document.querySelectorAll("[data-dismiss-credentials]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.lastIssuedCredentials = null;
+      render();
+    });
+  });
+
   const accountRequestForm = document.querySelector("#accountRequestForm");
   if (accountRequestForm) accountRequestForm.addEventListener("submit", requestAccount);
 
@@ -1615,6 +1749,7 @@ function handleAction(action) {
     },
     home: () => navigate("home"),
     login: () => navigate("login"),
+    forgotPassword: () => { state.resetStage = "email"; navigate("forgotPassword"); },
     clientLogin: () => navigate("clientLogin"),
     clientBooking: () => navigate("clientBooking"),
     accountRequest: () => navigate("accountRequest"),
@@ -1676,20 +1811,25 @@ async function requestAccount(event) {
   event.preventDefault();
   const form = new FormData(event.currentTarget);
   const request = {
-    name: String(form.get("name") || "New Roadlink Staff"),
-    email: String(form.get("email") || "staff@roadlink.example"),
+    name: String(form.get("name") || "").trim(),
+    email: String(form.get("email") || "").trim(),
     role: String(form.get("role") || "Coordinator"),
+    company: String(form.get("company") || "").trim(),
     status: "Pending",
     requestedAt: new Date().toLocaleString([], { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })
   };
   try {
     const result = await apiRequest("/api/auth/account-request", { method: "POST", body: JSON.stringify(request) });
     state.approvalRequests.unshift(result.request);
-  } catch {
+  } catch (error) {
+    if (state.dataMode !== "offline-demo") {
+      setToast(error?.message || "Could not send the request. Try again.");
+      return;
+    }
     state.approvalRequests.unshift({ ...request, id: `REQ-${Math.floor(1200 + Math.random() * 8000)}` });
   }
   state.screen = "home";
-  setToast(`Approval request sent to owner/admin for ${request.email}`);
+  setToast(`Approval request sent to owner/admin for ${request.email}`, 5000);
 }
 
 async function approveAccountRequest(requestId) {
@@ -1703,18 +1843,124 @@ async function approveAccountRequest(requestId) {
     request.status = "Approved";
     const profile = result.profile;
     state.users.unshift({
+      id: profile.id,
       name: profile.name,
       role: profile.roleLabel || request.role,
+      roleId: profile.role,
+      email: profile.email || request.email,
+      status: "active",
       username: result.credentials?.username || profile.username,
-      password: result.credentials?.password || "Sent by email",
+      password: "",
       initials: profile.initials || initials(profile.name),
       photo: profile.photo || ""
     });
+    state.lastIssuedCredentials = {
+      name: profile.name,
+      username: result.credentials?.username || profile.username,
+      password: result.credentials?.password || "",
+      emailOk: Boolean(result.email?.ok)
+    };
+    render();
     setToast(result.email?.ok
-      ? `Approved ${request.email}. Credentials sent by email.`
-      : `Approved ${request.email}. Login: ${result.credentials?.username} / ${result.credentials?.password}`);
+      ? `Approved ${request.email}. Credentials sent by email and shown above.`
+      : `Approved ${request.email}. Email failed — credentials are shown above.`, 6000);
   } catch (error) {
     setToast(error?.message || `Could not approve ${request.email}. Try again.`);
+  }
+}
+
+async function requestResetCode(event) {
+  event.preventDefault();
+  const form = new FormData(event.currentTarget);
+  const email = String(form.get("email") || "").trim();
+  if (!email) return;
+  const button = event.currentTarget.querySelector("button[type=submit]");
+  if (button) { button.disabled = true; button.textContent = "Sending..."; }
+  try {
+    const result = await apiRequest("/api/auth/forgot-password", { method: "POST", body: JSON.stringify({ email }) });
+    state.resetEmail = email;
+    state.resetStage = "code";
+    render();
+    setToast(result.message || "Reset code sent. Check your email.", 5000);
+  } catch (error) {
+    render();
+    setToast(error?.message || "Could not send the reset code. Try again.", 6000);
+  }
+}
+
+async function submitPasswordReset(event) {
+  event.preventDefault();
+  const form = new FormData(event.currentTarget);
+  try {
+    const result = await apiRequest("/api/auth/reset-password", {
+      method: "POST",
+      body: JSON.stringify({
+        email: state.resetEmail,
+        code: String(form.get("code") || "").trim(),
+        password: String(form.get("password") || "")
+      })
+    });
+    state.resetStage = "email";
+    state.screen = "login";
+    render();
+    setToast(result.message || "Password updated. Log in with your new password.", 5000);
+  } catch (error) {
+    setToast(error?.message || "Could not reset the password. Try again.", 5000);
+  }
+}
+
+async function changeOwnPassword(event) {
+  event.preventDefault();
+  const form = new FormData(event.currentTarget);
+  try {
+    const result = await apiRequest("/api/auth/change-password", {
+      method: "POST",
+      body: JSON.stringify({
+        currentPassword: String(form.get("currentPassword") || ""),
+        newPassword: String(form.get("newPassword") || "")
+      })
+    });
+    event.target.reset();
+    setToast(result.message || "Password changed.", 4000);
+  } catch (error) {
+    setToast(error?.message || "Could not change the password.", 5000);
+  }
+}
+
+async function adminResetUserPassword(profileId) {
+  const user = state.users.find((item) => item.id === profileId);
+  if (!user) return;
+  try {
+    const result = await apiRequest("/api/admin/reset-user-password", {
+      method: "POST",
+      body: JSON.stringify({ profileId })
+    });
+    state.lastIssuedCredentials = {
+      name: user.name,
+      username: result.credentials?.username || user.username,
+      password: result.credentials?.password || "",
+      emailOk: Boolean(result.email?.ok)
+    };
+    render();
+    setToast(`New temporary password issued for ${user.name}.`, 5000);
+  } catch (error) {
+    setToast(error?.message || "Could not reset the password.", 5000);
+  }
+}
+
+async function setUserStatus(profileId, status) {
+  const user = state.users.find((item) => item.id === profileId);
+  if (!user) return;
+  try {
+    await apiRequest("/api/admin/set-user-status", {
+      method: "POST",
+      body: JSON.stringify({ profileId, status })
+    });
+    user.status = status;
+    render();
+    setToast(status === "suspended" ? `${user.name} suspended. They can no longer log in.` : `${user.name} reactivated.`, 4000);
+  } catch (error) {
+    setToast(error?.message || "Could not update the account.", 5000);
   }
 }
 
