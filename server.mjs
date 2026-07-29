@@ -273,6 +273,7 @@ async function requireRole(request, ...roles) {
 }
 
 const loginAttempts = new Map();
+let emailOutboxProcessing = false;
 const publicActionAttempts = new Map();
 
 function requestIp(request) {
@@ -533,6 +534,13 @@ async function supabaseFetch(pathname, options = {}) {
   return payload;
 }
 
+async function supabaseRpc(functionName, parameters) {
+  return supabaseFetch(`/rest/v1/rpc/${encodeURIComponent(functionName)}`, {
+    method: "POST",
+    body: JSON.stringify(parameters)
+  });
+}
+
 async function tableList(table, order = "created_at.desc") {
   if (!supabaseConfigured()) return readStore()[table] || [];
   return supabaseFetch(`/rest/v1/${table}?select=*&order=${order}`);
@@ -721,10 +729,12 @@ async function addNotification({ role, title, body, tripId = "" }) {
 
 async function syncGoogleSheets(kind, payload) {
   if (!process.env.GOOGLE_SHEETS_WEBHOOK_URL) return { ok: false, skipped: true, message: "GOOGLE_SHEETS_WEBHOOK_URL is not configured." };
+  const safePayload = sheetMirrorPayload(payload);
+  const eventId = `RLSYNC-${Date.now()}-${randomBytes(6).toString("hex")}`;
   const response = await fetch(process.env.GOOGLE_SHEETS_WEBHOOK_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ kind, payload, sentAt: new Date().toISOString(), source: "roadlink-trip-control", secret: process.env.GOOGLE_SHEETS_WEBHOOK_SECRET || "" })
+    body: JSON.stringify({ eventId, kind, payload: safePayload, sentAt: new Date().toISOString(), source: "roadlink-trip-control", secret: process.env.GOOGLE_SHEETS_WEBHOOK_SECRET || "" })
   });
   const resultText = await response.text();
   let result = {};
@@ -735,6 +745,62 @@ async function syncGoogleSheets(kind, payload) {
   return { ok: true, message: result.message || "Synced" };
 }
 
+function sheetMirrorTrip(trip = {}) {
+  const waybill = trip.waybill || {};
+  const reconciliation = trip.reconciliation || {};
+  return {
+    id: trip.id || "",
+    client: trip.client || trip.company || "",
+    contact: trip.contact || trip.authorizedContact || "",
+    phone: trip.phone || "",
+    email: trip.email || "",
+    route: trip.route || ((trip.origin || trip.destination) ? `${trip.origin || "?"} to ${trip.destination || "?"}` : ""),
+    origin: trip.origin || "",
+    destination: trip.destination || "",
+    vehicle: trip.vehicle || "",
+    date: trip.date || "",
+    status: trip.status || "",
+    coordinator: trip.coordinator || "",
+    cancelledReason: trip.cancelledReason || "",
+    waybill: {
+      number: waybill.number || "",
+      preparedBy: waybill.preparedBy || "",
+      approvedBy: waybill.approvedBy || "",
+      financeBy: waybill.financeBy || "",
+      status: waybill.status || "",
+      freight: Number(waybill.freight || 0),
+      downpayment: Number(waybill.downpayment || 0),
+      arrastre: Number(waybill.arrastre || 0),
+      driver: Number(waybill.driver || 0),
+      helper: Number(waybill.helper || 0),
+      labor: Number(waybill.labor || 0),
+      others: Number(waybill.others || 0)
+    },
+    reconciliation: {
+      cashReturned: Boolean(reconciliation.cashReturned),
+      chequeVoided: Boolean(reconciliation.chequeVoided),
+      poCancelled: Boolean(reconciliation.poCancelled),
+      expensesUsed: reconciliation.expensesUsed || ""
+    }
+  };
+}
+
+function sheetMirrorPayload(payload = {}) {
+  if (payload.trip) {
+    return {
+      trip: sheetMirrorTrip(payload.trip),
+      ...(payload.item ? { item: {
+        id: payload.item.id || "",
+        type: payload.item.type || "",
+        detail: payload.item.detail || "",
+        amount: Number(payload.item.amount || 0),
+        state: payload.item.state || ""
+      } } : {})
+    };
+  }
+  return sheetMirrorTrip(payload);
+}
+
 function assetDataUri(relativePath, contentType) {
   const fullPath = join(root, relativePath);
   if (!existsSync(fullPath)) return "";
@@ -742,7 +808,10 @@ function assetDataUri(relativePath, contentType) {
 }
 
 function roadlinkEmailShell({ title, preview, body, actions = [], trip }) {
-  const signatureImage = assetDataUri("assets/email-signature-trucks.png", "image/png");
+  const publicOrigin = String(process.env.APP_ORIGIN || "").replace(/\/$/, "");
+  const signatureImage = publicOrigin
+    ? `${publicOrigin}/assets/email-signature-trucks.png`
+    : assetDataUri("assets/email-signature-trucks.png", "image/png");
   const logo = `
     <div style="font-style:italic;font-weight:900;font-size:42px;line-height:.9;color:#b9bec8;text-shadow:1px 1px 0 #4d5564,-1px -1px 0 #ffffff;">Roadlink</div>
     <div style="margin-top:4px;font-size:13px;font-weight:900;letter-spacing:.06em;color:#111827;">CARGO TRANSPORT SERVICE</div>
@@ -828,7 +897,67 @@ async function sendViaResend(email, kind, trip) {
 async function sendEmailKind(kind, trip, request) {
   const origin = appOrigin(request);
   const email = kind === "waybill" ? buildWaybillEmail(trip) : buildConfirmationEmail(trip, origin);
-  return sendViaResend(email, kind, trip);
+  const result = await sendViaResend(email, kind, trip);
+  if (!result.ok && supabaseConfigured() && ["confirmation", "waybill"].includes(kind)) {
+    await queueTripEmail(kind, trip, email.to?.[0] || trip.email, result.message || "Email delivery failed.");
+    return { ...result, queued: true, message: `${result.message || "Email delivery failed."} The message was queued for automatic retry.` };
+  }
+  return result;
+}
+
+async function queueTripEmail(kind, trip, recipient, errorMessage) {
+  const rows = await tableList("email_outbox", "created_at.asc");
+  const existing = rows.find((item) => item.tripId === trip.id && item.kind === kind && ["queued", "failed"].includes(item.status));
+  const patch = {
+    recipient,
+    status: "queued",
+    nextAttemptAt: new Date(Date.now() + 60_000).toISOString(),
+    lastError: String(errorMessage || "").slice(0, 500)
+  };
+  if (existing) return tableUpdate("email_outbox", existing.id, patch);
+  return tableInsert("email_outbox", {
+    id: `EMAIL-${Date.now()}-${randomBytes(5).toString("hex")}`,
+    kind,
+    tripId: trip.id,
+    ...patch,
+    attempts: 0
+  });
+}
+
+async function processEmailOutbox() {
+  if (emailOutboxProcessing || !supabaseConfigured() || !process.env.RESEND_API_KEY) return;
+  emailOutboxProcessing = true;
+  try {
+    const rows = await tableList("email_outbox", "created_at.asc");
+    const due = rows.filter((item) => ["queued", "failed"].includes(item.status) && new Date(item.nextAttemptAt || 0) <= new Date()).slice(0, 10);
+    for (const item of due) {
+      let trip = await findTrip(item.tripId);
+      if (!trip) {
+        await tableUpdate("email_outbox", item.id, { status: "dead", lastError: "Trip no longer exists." });
+        continue;
+      }
+      if (item.kind === "confirmation") trip = await tripForConfirmationEmail(trip);
+      const email = item.kind === "waybill" ? buildWaybillEmail(trip) : buildConfirmationEmail(trip, process.env.APP_ORIGIN);
+      const result = await sendViaResend(email, item.kind, trip).catch((error) => ({ ok: false, message: error.message }));
+      const attempts = Number(item.attempts || 0) + 1;
+      if (result.ok) {
+        await tableUpdate("email_outbox", item.id, { status: "sent", attempts, lastError: "", sent_at: new Date().toISOString() });
+      } else {
+        const dead = attempts >= 8;
+        const delayMinutes = Math.min(2 ** attempts, 60);
+        await tableUpdate("email_outbox", item.id, {
+          status: dead ? "dead" : "failed",
+          attempts,
+          nextAttemptAt: new Date(Date.now() + delayMinutes * 60_000).toISOString(),
+          lastError: String(result.message || "Email retry failed.").slice(0, 500)
+        });
+      }
+    }
+  } catch (error) {
+    console.error("Roadlink email outbox failed:", error);
+  } finally {
+    emailOutboxProcessing = false;
+  }
 }
 
 async function tripForConfirmationEmail(trip) {
@@ -1037,6 +1166,30 @@ async function handleClientAction(payload) {
   if (!clientTokenMatches(trip, payload.token)) return { ok: false, status: 403, message: "This client link is invalid." };
   if (trip.clientTokenExpiresAt && new Date(trip.clientTokenExpiresAt) < new Date()) return { ok: false, status: 403, message: "This client link has expired." };
 
+  let reason = "";
+  if (action === "cancel") {
+    try {
+      reason = cleanText(payload.reason || "Client cancelled through secure link.", "Cancellation reason", 500, true);
+    } catch (error) {
+      return { ok: false, status: 400, message: error.message };
+    }
+  }
+
+  if (supabaseConfigured()) {
+    const eventId = `CA-${Date.now()}-${randomBytes(5).toString("hex")}`;
+    const updated = normalizeTrip(await supabaseRpc("roadlink_client_action", {
+      p_trip_id: trip.id,
+      p_action: action,
+      p_reason: reason,
+      p_actor_email: trip.email,
+      p_actor_name: trip.contact,
+      p_event_id: eventId,
+      p_created_at: nowStamp()
+    }));
+    await syncGoogleSheets(`client_${action}`, updated).catch((error) => console.warn(error.message));
+    return { ok: true, trip: clientTripView(updated) };
+  }
+
   if (action === "confirm") {
     if (trip.status !== "pending") return { ok: false, status: 409, message: "This booking is no longer awaiting confirmation." };
     trip.status = "confirmed";
@@ -1045,11 +1198,7 @@ async function handleClientAction(payload) {
     if (["cancelled", "needs", "reconciled"].includes(trip.status)) return { ok: false, status: 409, message: "This booking is already cancelled." };
     const funded = totalBudget(trip) > 0;
     trip.status = funded ? "needs" : "cancelled";
-    try {
-      trip.cancelledReason = cleanText(payload.reason || "Client cancelled through secure link.", "Cancellation reason", 500, true);
-    } catch (error) {
-      return { ok: false, status: 400, message: error.message };
-    }
+    trip.cancelledReason = reason;
     if (funded) {
       await tableInsert("reconciliation_tasks", { id: `REC-${trip.id}`, tripId: trip.id, status: "open", alert: "For Immediate Checking", createdAt: nowStamp() });
       await addNotification({ role: "owner", tripId: trip.id, title: "For Immediate Checking", body: `${trip.client} cancelled ${trip.route} after ${money(totalBudget(trip))} was released.` });
@@ -1060,12 +1209,25 @@ async function handleClientAction(payload) {
     await addNotification({ role: "coordinator", tripId: trip.id, title: "Client requested contact", body: `${trip.contact} asked Roadlink to contact them about ${trip.route}.` });
   }
 
-  trip.timeline.push(eventLine(`Client action recorded: ${action}${payload.reason ? `. Reason: ${payload.reason}` : ""}`));
+  trip.timeline.push(eventLine(`Client action recorded: ${action}${reason ? `. Reason: ${reason}` : ""}`));
   await saveTrip(trip);
-  await tableInsert("client_actions", { id: `CA-${Date.now()}`, tripId: trip.id, action, actorEmail: trip.email, reason: payload.reason || "", createdAt: nowStamp() });
-  await addAudit({ tripId: trip.id, actor: trip.contact, action: `client_${action}`, detail: payload.reason || "Secure client link action" });
+  await tableInsert("client_actions", { id: `CA-${Date.now()}`, tripId: trip.id, action, actorEmail: trip.email, reason, createdAt: nowStamp() });
+  await addAudit({ tripId: trip.id, actor: trip.contact, action: `client_${action}`, detail: reason || "Secure client link action" });
   await syncGoogleSheets(`client_${action}`, trip).catch((error) => console.warn(error.message));
   return { ok: true, trip: clientTripView(trip) };
+}
+
+async function handleDemoClientLink(payload, actor) {
+  if (supabaseConfigured()) return { ok: false, status: 404, message: "Demo client simulation is unavailable in production." };
+  const trip = await findTrip(payload.tripId);
+  if (!trip) return { ok: false, status: 404, message: "Trip not found." };
+  const token = makeToken();
+  trip.clientToken = token;
+  trip.clientTokenHash = hashClientToken(token);
+  trip.clientTokenExpiresAt = futureIso(1);
+  await saveTrip(trip);
+  await addAudit({ tripId: trip.id, actor: actor.name, action: "demo_client_link_issued", detail: "Local walkthrough client simulator opened" });
+  return { ok: true, trip: clientTripView(trip), token };
 }
 
 function totalBudget(trip) {
@@ -1082,7 +1244,19 @@ async function handleBudget(payload, actor) {
   if (!["confirmed", "funds"].includes(trip.status)) return { ok: false, status: 409, message: "The client must confirm the trip before funds can be released." };
   if (trip.waybill?.status !== "Approved") return { ok: false, status: 409, message: "Manager and finance approval are required before funds can be released." };
   const actorName = actor?.name || "Accounting";
-  const item = { id: `BI-${Date.now()}`, type, detail: String(payload.detail || "").slice(0, 500), amount, state: "Logged" };
+  const eventId = `BI-${Date.now()}-${randomBytes(5).toString("hex")}`;
+  const item = { id: eventId, type, detail: String(payload.detail || "").slice(0, 500), amount, state: "Logged" };
+  if (supabaseConfigured()) {
+    const updated = normalizeTrip(await supabaseRpc("roadlink_budget_release", {
+      p_trip_id: trip.id,
+      p_item: item,
+      p_actor_name: actorName,
+      p_event_id: eventId,
+      p_created_at: nowStamp()
+    }));
+    await syncGoogleSheets("budget_logged", { trip: updated, item }).catch((error) => console.warn(error.message));
+    return { ok: true, trip: staffTripView(updated) };
+  }
   trip.budget.push(item);
   if (["pending", "confirmed"].includes(trip.status)) trip.status = "funds";
   trip.timeline.push(eventLine(`${item.type} release logged by ${actorName}`));
@@ -1097,6 +1271,18 @@ async function handleWaybillApproval(payload, signer, actor) {
   const trip = await findTrip(payload.tripId);
   if (!trip) return { ok: false, status: 404, message: "Trip not found." };
   const actorName = actor?.name || (signer === "manager" ? "Owner / Manager" : "Accounting");
+  if (supabaseConfigured()) {
+    const eventId = `WB-${Date.now()}-${randomBytes(5).toString("hex")}`;
+    const updated = normalizeTrip(await supabaseRpc("roadlink_waybill_approve", {
+      p_trip_id: trip.id,
+      p_signer: signer,
+      p_actor_name: actorName,
+      p_event_id: eventId,
+      p_created_at: nowStamp()
+    }));
+    await syncGoogleSheets(`waybill_${signer}_approved`, updated).catch((error) => console.warn(error.message));
+    return { ok: true, trip: staffTripView(updated) };
+  }
   if (signer === "manager") {
     if (trip.waybill.status !== "Submitted") return { ok: false, status: 409, message: "The coordinator must submit the waybill before manager approval." };
     trip.waybill.approvedBy = actorName;
@@ -1149,6 +1335,7 @@ async function handleWaybillSubmit(payload, actor) {
   await saveTrip(trip);
   await addNotification({ role: "owner", tripId: trip.id, title: "Waybill for approval", body: `${trip.route} needs manager approval.` });
   await addAudit({ tripId: trip.id, actor: actor?.name || "Coordinator", action: "waybill_submitted", detail: `Waybill ${trip.waybill.number}` });
+  await syncGoogleSheets("waybill_submitted", trip).catch((error) => console.warn(error.message));
   return { ok: true, trip: staffTripView(trip) };
 }
 
@@ -1169,6 +1356,18 @@ async function handleReconciliation(payload, actor) {
     poCancelled: Boolean(payload.poCancelled),
     expensesUsed: notes
   };
+  if (supabaseConfigured()) {
+    const eventId = `REC-${Date.now()}-${randomBytes(5).toString("hex")}`;
+    const updated = normalizeTrip(await supabaseRpc("roadlink_reconcile", {
+      p_trip_id: trip.id,
+      p_reconciliation: trip.reconciliation,
+      p_actor_name: actor?.name || "Accounting",
+      p_event_id: eventId,
+      p_created_at: nowStamp()
+    }));
+    await syncGoogleSheets("reconciliation_completed", updated).catch((error) => console.warn(error.message));
+    return { ok: true, trip: staffTripView(updated) };
+  }
   trip.status = "reconciled";
   trip.timeline.push(eventLine("Accounting marked cancellation funds as reconciled"));
   await saveTrip(trip);
@@ -1362,6 +1561,7 @@ async function handleRequest(request, response) {
       "/api/admin/reset-user-password": guard(["admin", "owner"], (actor) => handleAdminResetPassword(payload, actor, request)),
       "/api/admin/set-user-status": guard(["admin", "owner"], (actor) => handleSetUserStatus(payload, actor)),
       "/api/trips": guard(["coordinator", "owner", "admin"], (actor) => handleCreateTrip(payload, request, actor)),
+      "/api/demo/client-link": guard(staffRoles, (actor) => handleDemoClientLink(payload, actor)),
       "/api/client-action": () => handleClientAction(payload),
       "/api/budget-items": guard(["accounting", "admin"], (actor) => handleBudget(payload, actor)),
       "/api/waybills/submit": guard(["coordinator", "owner", "admin"], (actor) => handleWaybillSubmit(payload, actor)),
@@ -1464,5 +1664,8 @@ if (isMainModule) {
   const server = createRoadlinkServer();
   server.listen(port, () => {
     console.log(`Roadlink Trip Control running at http://127.0.0.1:${port}`);
+    processEmailOutbox();
+    const outboxTimer = setInterval(processEmailOutbox, 60_000);
+    outboxTimer.unref();
   });
 }

@@ -94,11 +94,12 @@ Why use Google Sheets anyway:
 3. Open the hosted HTTPS URL on Android Chrome and choose `Install app`.
 4. Open the hosted HTTPS URL on iPhone Safari and choose `Add to Home Screen`.
 5. Keep using the same hosted URL for laptop access.
-6. Apply both Supabase migrations before relying on real cross-device client confirmation links.
+6. Apply all Supabase migrations before relying on real cross-device client confirmation links.
 
 Supabase production setup checklist:
 
-- Apply `0001_init.sql` and then `0002_live_integrity.sql`.
+- Apply `0001_init.sql`, `0002_live_integrity.sql`,
+  `0003_atomic_operations.sql`, and `0004_email_outbox.sql` in order.
 - Enable Row Level Security on all exposed tables.
 - Staff roles can read/write only their workflow areas.
 - Client users can read only bookings and booking requests tied to their company.
@@ -131,7 +132,7 @@ Information to request from SSD GPS:
 
 ## Google Sheets Mirror
 
-The first implementation uses `GOOGLE_SHEETS_WEBHOOK_URL`, usually a Google Apps Script web app attached to the Roadlink spreadsheet. The backend posts JSON events such as `trip_created`, `budget_logged`, `client_cancel`, and `reconciliation_completed`. The Sheet should be treated as read-only review output for Roadlink managers, not the control source for the app.
+The first implementation uses `GOOGLE_SHEETS_WEBHOOK_URL`, usually a Google Apps Script web app attached to the Roadlink spreadsheet. The backend posts sanitized JSON events such as `trip_created`, `budget_logged`, `client_cancel`, and `reconciliation_completed`. Events carry unique IDs so Apps Script can ignore retries safely. Current trip, waybill, booking-request, and reconciliation rows update in place; ledger and audit events append. Client-link tokens, password data, and server credentials are never mirrored. The Sheet should be treated as read-only review output for Roadlink managers, not the control source for the app.
 
 ## Demo Script
 

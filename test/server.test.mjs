@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import { mkdtempSync, rmSync } from "node:fs";
+import { createServer as createHttpServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -77,6 +78,40 @@ test("privileged routes reject unauthenticated requests", async () => {
   }
 });
 
+test("Google Sheets mirror payload excludes client-link secrets", async () => {
+  let received;
+  const webhook = createHttpServer((req, res) => {
+    let body = "";
+    req.on("data", (chunk) => { body += chunk; });
+    req.on("end", () => {
+      received = JSON.parse(body);
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ ok: true }));
+    });
+  });
+  await new Promise((resolve) => webhook.listen(0, "127.0.0.1", resolve));
+  process.env.GOOGLE_SHEETS_WEBHOOK_URL = `http://127.0.0.1:${webhook.address().port}`;
+  process.env.GOOGLE_SHEETS_WEBHOOK_SECRET = "test-webhook-secret";
+  try {
+    const owner = await login("owner", "owner.temp", "Roadlink-6714");
+    const result = await request("/api/sync/google-sheets", {
+      method: "POST",
+      cookie: owner,
+      body: { kind: "manual", payload: { id: "RL-SHEET-TEST", client: "Mirror Test", clientToken: "raw-secret", clientTokenHash: "hashed-secret", waybill: { number: "WB-1" } } }
+    });
+    assert.equal(result.response.status, 200);
+    assert.match(received.eventId, /^RLSYNC-/);
+    assert.equal(received.secret, "test-webhook-secret");
+    assert.equal(received.payload.id, "RL-SHEET-TEST");
+    assert.equal(received.payload.clientToken, undefined);
+    assert.equal(received.payload.clientTokenHash, undefined);
+  } finally {
+    delete process.env.GOOGLE_SHEETS_WEBHOOK_URL;
+    delete process.env.GOOGLE_SHEETS_WEBHOOK_SECRET;
+    await new Promise((resolve) => webhook.close(resolve));
+  }
+});
+
 test("role-scoped workflow preserves approval and reconciliation order", async () => {
   const coordinator = await login("coordinator", "mika.temp", "Roadlink-8421");
   const owner = await login("owner", "owner.temp", "Roadlink-6714");
@@ -99,7 +134,16 @@ test("role-scoped workflow preserves approval and reconciliation order", async (
   assert.equal(created.response.status, 200);
   assert.equal(created.json.trip.clientToken, undefined);
   assert.equal(created.json.trip.clientTokenHash, undefined);
-  const token = created.json.demoClientToken;
+  const demoLink = await request("/api/demo/client-link", { method: "POST", cookie: coordinator, body: { tripId: tripInput.id } });
+  assert.equal(demoLink.response.status, 200);
+  assert.equal(demoLink.json.trip.clientTokenHash, undefined);
+  const token = demoLink.json.token;
+
+  const clientReview = await request(`/api/client-trip?trip=${encodeURIComponent(tripInput.id)}&token=${encodeURIComponent(token)}`);
+  assert.equal(clientReview.response.status, 200);
+  assert.deepEqual(clientReview.json.trip.budget, []);
+  const invalidClientReview = await request(`/api/client-trip?trip=${encodeURIComponent(tripInput.id)}&token=invalid-token`);
+  assert.equal(invalidClientReview.response.status, 403);
 
   const prematureBudget = await request("/api/budget-items", { method: "POST", cookie: accounting, body: { tripId: tripInput.id, type: "Cash", amount: 1000 } });
   assert.equal(prematureBudget.response.status, 409);

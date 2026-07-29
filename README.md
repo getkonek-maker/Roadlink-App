@@ -211,9 +211,12 @@ Completed:
 
 Still to do before live operations:
 
-- Apply `supabase/migrations/0002_live_integrity.sql`.
+- Confirm `supabase/migrations/0002_live_integrity.sql`,
+  `supabase/migrations/0003_atomic_operations.sql`, and
+  `supabase/migrations/0004_email_outbox.sql`; all are currently applied
+  to the connected Roadlink Supabase project.
 - Complete every item in `LIVE_OPERATIONS_CHECKLIST.md`.
-- Add and verify the Supabase, app-origin, and Google Sheets environment variables in Render.
+- Add and verify the app-origin and Google Sheets environment variables in Render.
 - Verify a Roadlink sending domain in Resend.
 - Rotate development credentials and replace demo users/passwords with approved production users.
 - Upgrade Render from the free tier to an always-on instance.

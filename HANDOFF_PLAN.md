@@ -5,7 +5,8 @@
 - Repository: `https://github.com/getkonek-maker/Roadlink-App`
 - Branch deployed by Render: `main`
 - Render URL: `https://roadlink-app.onrender.com`
-- Last commit before the current hardening work: `6bdd307`
+- Current hardening branch: `codex/live-operations-hardening`
+- Last pushed hardening commit before this pass: `d9e7a48`
 - Runtime: Node.js server plus vanilla JavaScript PWA
 - Database: Supabase through server-side PostgREST
 - Email: Resend
@@ -18,6 +19,10 @@
 - `app.js`: staff and client PWA interface.
 - `supabase/migrations/0001_init.sql`: pilot schema.
 - `supabase/migrations/0002_live_integrity.sql`: required live-integrity update.
+- `supabase/migrations/0003_atomic_operations.sql`: atomic cancellation,
+  approval, release, and reconciliation transitions.
+- `supabase/migrations/0004_email_outbox.sql`: persistent retry queue for trip
+  confirmation and waybill email.
 - `google-apps-script/sheets-webhook.gs`: read-only Sheets mirror receiver.
 - `test/server.test.mjs`: API security and complete workflow tests.
 - `LIVE_OPERATIONS_CHECKLIST.md`: deployment and go-live gate.
@@ -46,11 +51,16 @@
 - Accounting cannot complete reconciliation while released items are
   unresolved or unexplained.
 - Optimistic trip versions prevent silent last-write-wins overwrites.
+- Sensitive multi-table transitions run as Supabase transactions and were
+  verified in a rollback-only live-database drill.
+- Sheets payloads are sanitized and use idempotent event IDs.
 
 ## Required Deployment Order
 
-1. Back up Supabase.
-2. Apply `0002_live_integrity.sql`.
+1. Confirm Supabase backup/retention policy.
+2. Confirm `0002_live_integrity.sql`, `0003_atomic_operations.sql`, and
+   `0004_email_outbox.sql`; all are
+   already applied to project `ewmtiykslrnprsreilil`.
 3. Configure all environment variables listed in `.env.example` on Render.
 4. Configure the matching Apps Script secret property.
 5. Verify the Resend sender domain and rotate development credentials.
@@ -61,18 +71,16 @@
 10. Merge/deploy to production and verify `/api/health` reports
     `operational: true`.
 
-Do not push the current server changes to the production `main` branch before
-the matching Supabase migration is applied. The new server writes columns that
-do not exist in the pilot schema.
+The matching Supabase migrations are applied. Deploy the server only after the
+test suite remains green and Render environment variables are verified.
 
 ## Next Engineering Priorities
 
 The first four items below are required before Roadlink relies on the app as the
 sole control for live cash and cheque releases.
 
-- Add Supabase RPC transactions for cancellation, release, approval, and
-  reconciliation so each multi-table operation commits atomically.
-- Add Resend delivery webhooks and a retryable email outbox.
+- Add Resend delivery webhooks for delivery and bounce status; application
+  retries are already handled by the Supabase email outbox.
 - Add structured error monitoring and alerting.
 - Add database backup restore drills and retention policy documentation.
 - Add notification read state and background refresh.
@@ -86,6 +94,7 @@ Continue Roadlink Trip Control from
 `LIVE_OPERATIONS_CHECKLIST.md`, `HANDOFF_PLAN.md`, `server.mjs`, `app.js`, and
 both Supabase migrations before editing. The app is deployed on Render from
 `main`, but the current hardening changes must not be deployed until migration
-`0002_live_integrity.sql` has been applied. Preserve Supabase as the source of
-truth and Google Sheets as a read-only mirror. Never expose or commit service
+`0002_live_integrity.sql`, `0003_atomic_operations.sql`, and
+`0004_email_outbox.sql` have been applied.
+Preserve Supabase as the source of truth and Google Sheets as a read-only mirror. Never expose or commit service
 keys. Run `npm run verify` after every backend or workflow change.

@@ -27,11 +27,22 @@ is a read-only management mirror.
 - The phone UI shows only commands available to the signed-in role.
 - Automated tests cover public-file protection, authorization, and the complete
   trip-to-reconciliation workflow.
+- Client-link simulation is isolated to local-demo mode; production staff
+  previews cannot submit a response for a client.
+- Client actions, manager/finance approvals, budget releases, and reconciliation
+  commit through Supabase transaction functions.
+- Google Sheets events use unique event IDs, retry-safe deduplication, and
+  sanitized management payloads that exclude client-link secrets.
+- Failed confirmation and waybill emails enter a persistent Supabase outbox
+  with capped exponential retry.
 
 ## Required Before Deploying This Version
 
 1. Back up the current Supabase project.
-2. Apply `supabase/migrations/0002_live_integrity.sql` in the Supabase SQL editor.
+2. Confirm migrations `0002_live_integrity.sql`,
+   `0003_atomic_operations.sql`, and `0004_email_outbox.sql` are applied. All
+   are currently installed in
+   project `ewmtiykslrnprsreilil` through the connected Supabase API.
 3. Confirm the migration created:
    - `trips.clientTokenHash`
    - `trips.clientId`
@@ -50,8 +61,9 @@ is a read-only management mirror.
    - `ROADLINK_EMAIL_FROM`
    - `GOOGLE_SHEETS_WEBHOOK_URL`
    - `GOOGLE_SHEETS_WEBHOOK_SECRET`
-5. Set the matching `ROADLINK_WEBHOOK_SECRET` script property in Google Apps
-   Script and redeploy the Sheets webhook.
+5. Import the prepared management workbook, authorize the connected Google
+   account for Drive writes, then deploy `google-apps-script/sheets-webhook.gs`
+   with the matching `ROADLINK_WEBHOOK_SECRET` property.
 6. Verify a Roadlink- or Konek-owned domain in Resend. Do not use
    `onboarding@resend.dev` for live clients.
 7. Rotate the Resend key previously shared during development.
@@ -83,10 +95,18 @@ on the results.
 Before the app becomes the sole control for real cash or cheque releases, also
 complete these engineering controls:
 
-- Move cancellation, approval, fund release, and reconciliation writes into
-  Supabase transaction functions so the trip, audit, notification, and ledger
-  records either all commit or all roll back.
-- Add a persistent email outbox plus Resend delivery webhooks and retry handling.
+- Add Resend delivery webhooks so provider delivery/bounce events supplement
+  the application outbox status.
 - Configure uptime and application-error alerts with an accountable recipient.
 - Complete and record a Supabase backup restore drill.
 - Document incident response, access review, and staff offboarding ownership.
+
+## Owner Actions Remaining
+
+The implementation is structured so Roadlink/Konek only needs two
+external-provider actions:
+
+1. Reconnect Google Drive with write permission and authorize the prepared
+   management Sheet/Apps Script deployment.
+2. Create a replacement Resend API key and verify the Roadlink or Konek sender
+   domain. The previously supplied key now returns `401` and must not be reused.

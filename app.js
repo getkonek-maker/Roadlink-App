@@ -282,6 +282,26 @@ function clientActionToken(tripId) {
   return params.get("token") || state.demoClientTokens[tripId] || "";
 }
 
+async function openClientPreview(tripId) {
+  state.clientPreviewTripId = tripId;
+  state.cancellationFormOpen = false;
+  if (state.dataMode === "local-demo" && state.session) {
+    try {
+      const result = await apiRequest("/api/demo/client-link", {
+        method: "POST",
+        body: JSON.stringify({ tripId })
+      });
+      state.demoClientTokens[tripId] = result.token;
+    } catch (error) {
+      delete state.demoClientTokens[tripId];
+      setToast(error?.message || "The demo client simulator could not be opened.", 6000);
+    }
+  } else if (!new URLSearchParams(window.location.search).get("token")) {
+    delete state.demoClientTokens[tripId];
+  }
+  navigate("client", tripId);
+}
+
 function sessionToken() {
   return state.session?.accessToken || state.clientSession?.accessToken || "";
 }
@@ -1360,6 +1380,12 @@ function renderClientPreview() {
           <span>${displayDate(trip.date)}</span>
           <span>${trip.client}</span>
         </div>
+        ${state.dataMode === "local-demo" && canSubmitClientAction ? `
+          <div class="notice-card">
+            <strong>Local walkthrough simulator</strong>
+            <span>These actions update demo records only. Production staff previews cannot act for a client.</span>
+          </div>
+        ` : ""}
         ${!canSubmitClientAction ? `
           <div class="notice-card">
             <strong>Staff preview only</strong>
@@ -1637,10 +1663,7 @@ function bindScreenEvents() {
   });
 
   document.querySelectorAll("[data-client-link]").forEach((button) => {
-    button.addEventListener("click", () => {
-      state.clientPreviewTripId = button.dataset.clientLink;
-      navigate("client", button.dataset.clientLink);
-    });
+    button.addEventListener("click", () => openClientPreview(button.dataset.clientLink));
   });
 
   document.querySelectorAll("[data-share]").forEach((button) => {
@@ -1804,10 +1827,7 @@ function handleAction(action) {
     logoutClient: () => logoutCurrentUser(),
     newTrip: () => navigate("newTrip"),
     budget: () => navigate("budget", trip.id),
-    clientPreview: () => {
-      state.clientPreviewTripId = trip.id;
-      navigate("client", trip.id);
-    },
+    clientPreview: () => openClientPreview(trip.id),
     openReconcile: () => navigate("reconcile", trip.id),
     audit: () => navigate("audit", trip.id),
     waybill: () => navigate("waybill", trip.id),

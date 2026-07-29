@@ -20,23 +20,28 @@
 
 var TABS = {
   TRIPS: "Trips",
+  REQUESTS: "Booking Requests",
   WAYBILLS: "Waybills",
   BUDGET: "Budget Releases",
   CLIENT: "Client Actions",
   RECON: "Reconciliation",
-  AUDIT: "Audit Export"
+  AUDIT: "Audit Export",
+  EVENTS: "_Sync Events"
 };
 
 var HEADERS = {
   "Trips": ["Received At", "Event", "Trip ID", "Client", "Route", "Vehicle", "Trip Date", "Status", "Coordinator", "Contact", "Phone", "Email"],
+  "Booking Requests": ["Received At", "Request ID", "Company", "Route", "Vehicle", "Trip Date", "Status", "Contact", "Phone", "Email"],
   "Waybills": ["Received At", "Event", "Trip ID", "Waybill No", "Route", "Prepared By", "Manager Approval", "Finance Approval", "Waybill Status", "Freight", "Cash Out Total"],
   "Budget Releases": ["Received At", "Trip ID", "Client", "Type", "Detail", "Amount", "State"],
   "Client Actions": ["Received At", "Action", "Trip ID", "Client", "Route", "Reason", "Trip Status"],
   "Reconciliation": ["Received At", "Trip ID", "Client", "Route", "Cash Returned", "Cheque Voided", "PO Cancelled", "Expenses Used", "Trip Status"],
-  "Audit Export": ["Received At", "Kind", "Trip ID", "Summary", "Raw JSON"]
+  "Audit Export": ["Received At", "Event ID", "Kind", "Trip ID", "Summary", "Raw JSON"],
+  "_Sync Events": ["Event ID", "Received At"]
 };
 
 function doPost(e) {
+  var lock = LockService.getScriptLock();
   try {
     var expectedSecret = PropertiesService.getScriptProperties().getProperty("ROADLINK_WEBHOOK_SECRET") || "";
     var body = JSON.parse((e && e.postData && e.postData.contents) || "{}");
@@ -49,33 +54,47 @@ function doPost(e) {
 
     var kind = String(body.kind || "manual");
     var payload = body.payload || {};
+    var eventId = String(body.eventId || "");
+    if (!eventId) return respond(400, { ok: false, message: "Missing event ID." });
     var receivedAt = new Date();
 
-    routeEvent(kind, payload, receivedAt);
+    lock.waitLock(20000);
+    if (eventProcessed(eventId)) return respond(200, { ok: true, duplicate: true, kind: kind });
+    routeEvent(eventId, kind, payload, receivedAt);
     // Every event also lands in the audit tab so nothing is ever silently lost.
-    appendRow(TABS.AUDIT, [receivedAt, kind, tripIdOf(payload), summarize(kind, payload), JSON.stringify(payload).slice(0, 4000)]);
+    appendRow(TABS.AUDIT, [receivedAt, eventId, kind, tripIdOf(payload), summarize(kind, payload), JSON.stringify(payload).slice(0, 4000)]);
+    recordEvent(eventId, receivedAt);
 
     return respond(200, { ok: true, kind: kind });
   } catch (error) {
     return respond(500, { ok: false, message: String(error) });
+  } finally {
+    if (lock.hasLock()) lock.releaseLock();
   }
 }
 
-function routeEvent(kind, payload, receivedAt) {
+function routeEvent(eventId, kind, payload, receivedAt) {
   var trip = payload.trip || payload; // budget_logged sends {trip, item}; most kinds send the trip itself.
 
-  if (kind === "trip_created" || kind === "client_booking_request") {
-    appendRow(TABS.TRIPS, [
-      receivedAt, kind, trip.id || "", trip.client || trip.company || "", trip.route || routeOf(trip),
-      trip.vehicle || "", trip.date || "", trip.status || "", trip.coordinator || "",
-      trip.contact || "", trip.phone || "", trip.email || ""
+  if (kind === "client_booking_request") {
+    upsertRow(TABS.REQUESTS, 2, trip.id || "", [
+      receivedAt, trip.id || "", trip.client || trip.company || "", trip.route || routeOf(trip),
+      trip.vehicle || "", trip.date || "", trip.status || "", trip.contact || "", trip.phone || "", trip.email || ""
     ]);
     return;
   }
 
-  if (kind === "waybill_manager_approved" || kind === "waybill_finance_approved") {
+  if (trip.id) {
+    upsertRow(TABS.TRIPS, 3, trip.id, [
+      receivedAt, kind, trip.id || "", trip.client || trip.company || "", trip.route || routeOf(trip),
+      trip.vehicle || "", trip.date || "", trip.status || "", trip.coordinator || "",
+      trip.contact || "", trip.phone || "", trip.email || ""
+    ]);
+  }
+
+  if (kind === "waybill_submitted" || kind === "waybill_manager_approved" || kind === "waybill_finance_approved") {
     var waybill = trip.waybill || {};
-    appendRow(TABS.WAYBILLS, [
+    upsertRow(TABS.WAYBILLS, 3, trip.id || "", [
       receivedAt, kind, trip.id || "", waybill.number || "", trip.route || "",
       waybill.preparedBy || "", waybill.approvedBy || "", waybill.financeBy || "",
       waybill.status || "", Number(waybill.freight || 0), cashOutTotal(waybill)
@@ -102,7 +121,7 @@ function routeEvent(kind, payload, receivedAt) {
 
   if (kind === "reconciliation_completed") {
     var recon = trip.reconciliation || {};
-    appendRow(TABS.RECON, [
+    upsertRow(TABS.RECON, 2, trip.id || "", [
       receivedAt, trip.id || "", trip.client || "", trip.route || "",
       recon.cashReturned ? "Yes" : "No", recon.chequeVoided ? "Yes" : "No",
       recon.poCancelled ? "Yes" : "No", recon.expensesUsed || "", trip.status || ""
@@ -112,7 +131,21 @@ function routeEvent(kind, payload, receivedAt) {
   // Unrecognized kinds still reach the Audit Export tab via doPost.
 }
 
+function upsertRow(tabName, keyColumn, key, row) {
+  if (!key) return appendRow(tabName, row);
+  var sheet = sheetFor(tabName);
+  var match = sheet.getRange(2, keyColumn, Math.max(sheet.getLastRow() - 1, 1), 1)
+    .createTextFinder(String(key)).matchEntireCell(true).findNext();
+  var rowNumber = match ? match.getRow() : sheet.getLastRow() + 1;
+  sheet.getRange(rowNumber, 1, 1, row.length).setValues([row]);
+}
+
 function appendRow(tabName, row) {
+  var sheet = sheetFor(tabName);
+  sheet.appendRow(row);
+}
+
+function sheetFor(tabName) {
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(tabName);
   if (!sheet) {
     sheet = SpreadsheetApp.getActiveSpreadsheet().insertSheet(tabName);
@@ -122,7 +155,19 @@ function appendRow(tabName, row) {
     sheet.getRange(1, 1, 1, HEADERS[tabName].length).setFontWeight("bold");
     sheet.setFrozenRows(1);
   }
-  sheet.appendRow(row);
+  if (tabName === TABS.EVENTS && !sheet.isSheetHidden()) sheet.hideSheet();
+  return sheet;
+}
+
+function eventProcessed(eventId) {
+  var sheet = sheetFor(TABS.EVENTS);
+  if (sheet.getLastRow() < 2) return false;
+  return Boolean(sheet.getRange(2, 1, sheet.getLastRow() - 1, 1)
+    .createTextFinder(eventId).matchEntireCell(true).findNext());
+}
+
+function recordEvent(eventId, receivedAt) {
+  appendRow(TABS.EVENTS, [eventId, receivedAt]);
 }
 
 function cashOutTotal(waybill) {
