@@ -97,13 +97,17 @@ test("role-scoped workflow preserves approval and reconciliation order", async (
   };
   const created = await request("/api/trips", { method: "POST", cookie: coordinator, body: { trip: tripInput } });
   assert.equal(created.response.status, 200);
-  const token = created.json.trip.clientToken;
+  assert.equal(created.json.trip.clientToken, undefined);
+  assert.equal(created.json.trip.clientTokenHash, undefined);
+  const token = created.json.demoClientToken;
 
   const prematureBudget = await request("/api/budget-items", { method: "POST", cookie: accounting, body: { tripId: tripInput.id, type: "Cash", amount: 1000 } });
   assert.equal(prematureBudget.response.status, 409);
 
   const confirmed = await request("/api/client-action", { method: "POST", body: { tripId: tripInput.id, token, action: "confirm" } });
   assert.equal(confirmed.json.trip.status, "confirmed");
+  assert.deepEqual(confirmed.json.trip.budget, []);
+  assert.equal(confirmed.json.trip.clientTokenHash, undefined);
 
   const invalidWaybill = await request("/api/waybills/submit", {
     method: "POST",
@@ -129,7 +133,12 @@ test("role-scoped workflow preserves approval and reconciliation order", async (
   const funded = await request("/api/budget-items", { method: "POST", cookie: accounting, body: { tripId: tripInput.id, type: "Cash", detail: "Meals", amount: 15000 } });
   assert.equal(funded.json.trip.status, "funds");
   const cancelled = await request("/api/client-action", { method: "POST", body: { tripId: tripInput.id, token, action: "cancel", reason: "Client schedule changed" } });
-  assert.equal(cancelled.json.trip.status, "needs");
+  assert.equal(cancelled.json.trip.status, "cancelled");
+  assert.deepEqual(cancelled.json.trip.budget, []);
+  const accountingState = await request("/api/session/bootstrap", { cookie: accounting });
+  const cancelledInternalTrip = accountingState.json.data.trips.find((trip) => trip.id === tripInput.id);
+  assert.equal(cancelledInternalTrip.status, "needs");
+  assert.equal(cancelledInternalTrip.clientTokenHash, undefined);
 
   const incomplete = await request("/api/reconciliation/update", { method: "POST", cookie: accounting, body: { tripId: tripInput.id } });
   assert.equal(incomplete.response.status, 400);

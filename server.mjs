@@ -614,6 +614,13 @@ function clientTripView(trip) {
   };
 }
 
+function staffTripView(trip) {
+  const view = { ...trip };
+  delete view.clientToken;
+  delete view.clientTokenHash;
+  return view;
+}
+
 function clientOwnsTrip(trip, profile) {
   if (profile.clientId) return trip.clientId === profile.clientId;
   return (profile.company && trip.client === profile.company) || (profile.email && trip.email === profile.email);
@@ -652,7 +659,7 @@ async function sessionBootstrap(profile) {
       accountRequests: [],
       clients,
       bookingRequests,
-      trips: normalizedTrips,
+      trips: normalizedTrips.map(staffTripView),
       notifications: notifications.filter((item) => item.role === "coordinator"),
       auditEvents: []
     };
@@ -665,7 +672,7 @@ async function sessionBootstrap(profile) {
       accountRequests: [],
       clients: [],
       bookingRequests: [],
-      trips: normalizedTrips,
+      trips: normalizedTrips.map(staffTripView),
       notifications: notifications.filter((item) => item.role === "accounting"),
       auditEvents
     };
@@ -677,7 +684,7 @@ async function sessionBootstrap(profile) {
     accountRequests,
     clients,
     bookingRequests,
-    trips: normalizedTrips,
+    trips: normalizedTrips.map(staffTripView),
     notifications,
     auditEvents
   };
@@ -1014,7 +1021,12 @@ async function handleCreateTrip(payload, request, actor) {
   await addNotification({ role: "owner", tripId: trip.id, title: "New trip created", body: `${trip.route} is waiting for client confirmation.` });
   await syncGoogleSheets("trip_created", trip).catch((error) => console.warn(error.message));
   const emailResult = await sendEmailKind("confirmation", trip, request).catch((error) => ({ ok: false, message: error.message }));
-  return { ok: true, trip, email: emailResult };
+  return {
+    ok: true,
+    trip: staffTripView(trip),
+    email: emailResult,
+    ...(!supabaseConfigured() ? { demoClientToken: trip.clientToken } : {})
+  };
 }
 
 async function handleClientAction(payload) {
@@ -1033,7 +1045,11 @@ async function handleClientAction(payload) {
     if (["cancelled", "needs", "reconciled"].includes(trip.status)) return { ok: false, status: 409, message: "This booking is already cancelled." };
     const funded = totalBudget(trip) > 0;
     trip.status = funded ? "needs" : "cancelled";
-    trip.cancelledReason = payload.reason || "Client cancelled through secure link.";
+    try {
+      trip.cancelledReason = cleanText(payload.reason || "Client cancelled through secure link.", "Cancellation reason", 500, true);
+    } catch (error) {
+      return { ok: false, status: 400, message: error.message };
+    }
     if (funded) {
       await tableInsert("reconciliation_tasks", { id: `REC-${trip.id}`, tripId: trip.id, status: "open", alert: "For Immediate Checking", createdAt: nowStamp() });
       await addNotification({ role: "owner", tripId: trip.id, title: "For Immediate Checking", body: `${trip.client} cancelled ${trip.route} after ${money(totalBudget(trip))} was released.` });
@@ -1049,7 +1065,7 @@ async function handleClientAction(payload) {
   await tableInsert("client_actions", { id: `CA-${Date.now()}`, tripId: trip.id, action, actorEmail: trip.email, reason: payload.reason || "", createdAt: nowStamp() });
   await addAudit({ tripId: trip.id, actor: trip.contact, action: `client_${action}`, detail: payload.reason || "Secure client link action" });
   await syncGoogleSheets(`client_${action}`, trip).catch((error) => console.warn(error.message));
-  return { ok: true, trip };
+  return { ok: true, trip: clientTripView(trip) };
 }
 
 function totalBudget(trip) {
@@ -1074,7 +1090,7 @@ async function handleBudget(payload, actor) {
   await tableInsert("budget_items", { ...item, tripId: trip.id, createdAt: nowStamp() });
   await addAudit({ tripId: trip.id, actor: actorName, action: "budget_logged", detail: `${item.type}: ${money(item.amount)}` });
   await syncGoogleSheets("budget_logged", { trip, item }).catch((error) => console.warn(error.message));
-  return { ok: true, trip };
+  return { ok: true, trip: staffTripView(trip) };
 }
 
 async function handleWaybillApproval(payload, signer, actor) {
@@ -1097,7 +1113,7 @@ async function handleWaybillApproval(payload, signer, actor) {
   await saveTrip(trip);
   await addAudit({ tripId: trip.id, actor: actorName, action: `waybill_${signer}_approved`, detail: `Waybill ${trip.waybill.number}` });
   await syncGoogleSheets(`waybill_${signer}_approved`, trip).catch((error) => console.warn(error.message));
-  return { ok: true, trip };
+  return { ok: true, trip: staffTripView(trip) };
 }
 
 async function handleWaybillSubmit(payload, actor) {
@@ -1133,7 +1149,7 @@ async function handleWaybillSubmit(payload, actor) {
   await saveTrip(trip);
   await addNotification({ role: "owner", tripId: trip.id, title: "Waybill for approval", body: `${trip.route} needs manager approval.` });
   await addAudit({ tripId: trip.id, actor: actor?.name || "Coordinator", action: "waybill_submitted", detail: `Waybill ${trip.waybill.number}` });
-  return { ok: true, trip };
+  return { ok: true, trip: staffTripView(trip) };
 }
 
 async function handleReconciliation(payload, actor) {
@@ -1159,7 +1175,7 @@ async function handleReconciliation(payload, actor) {
   await tableUpdate("reconciliation_tasks", `REC-${trip.id}`, { status: "complete", completedAt: nowStamp(), notes: trip.reconciliation.expensesUsed });
   await addAudit({ tripId: trip.id, actor: actor?.name || "Accounting", action: "reconciliation_completed", detail: trip.reconciliation.expensesUsed || "Completed" });
   await syncGoogleSheets("reconciliation_completed", trip).catch((error) => console.warn(error.message));
-  return { ok: true, trip };
+  return { ok: true, trip: staffTripView(trip) };
 }
 
 async function handleAccountRequest(payload, httpRequest) {

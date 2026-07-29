@@ -89,7 +89,8 @@ const state = {
   selectedTripId: "RL-2407",
   selectedBookingRequestId: "",
   clientPreviewTripId: null,
-  otpSent: false,
+  demoClientTokens: {},
+  cancellationFormOpen: false,
   newUserPhoto: "",
   testEmails: ["zenojief_roadlink@yahoo.com", "emmanblangarc@gmail.com"],
   approvalRequests: [
@@ -274,6 +275,11 @@ function statusClass(status) {
 
 function selectedTrip() {
   return state.trips.find((trip) => trip.id === state.selectedTripId) || state.trips[0];
+}
+
+function clientActionToken(tripId) {
+  const params = new URLSearchParams(window.location.search);
+  return params.get("token") || state.demoClientTokens[tripId] || "";
 }
 
 function sessionToken() {
@@ -473,7 +479,7 @@ function setToast(message, duration = 2600) {
 function navigate(screen, tripId) {
   state.screen = screen;
   if (tripId) state.selectedTripId = tripId;
-  state.otpSent = false;
+  state.cancellationFormOpen = false;
   render();
 }
 
@@ -1339,6 +1345,7 @@ function renderWaybill() {
 function renderClientPreview() {
   const trip = state.trips.find((item) => item.id === state.clientPreviewTripId) || selectedTrip();
   const cancelled = trip.status === "cancelled" || trip.status === "needs" || trip.status === "reconciled";
+  const canSubmitClientAction = Boolean(clientActionToken(trip.id));
 
   return `
     <section class="screen client-preview">
@@ -1353,7 +1360,12 @@ function renderClientPreview() {
           <span>${displayDate(trip.date)}</span>
           <span>${trip.client}</span>
         </div>
-        ${cancelled ? `
+        ${!canSubmitClientAction ? `
+          <div class="notice-card">
+            <strong>Staff preview only</strong>
+            <span>The live buttons are available only from the secure link sent to the authorized client.</span>
+          </div>
+        ` : cancelled ? `
           <div class="alert-card">
             <strong>This booking is already cancelled.</strong>
             <span>Roadlink staff have been notified.</span>
@@ -1363,7 +1375,7 @@ function renderClientPreview() {
             <button class="success" type="button" data-client-confirm="${trip.id}">Confirm Booking</button>
             <button class="danger" type="button" data-client-cancel="${trip.id}">Cancel Booking</button>
           </div>
-          ${state.otpSent ? `
+          ${state.cancellationFormOpen ? `
             <div class="form-card">
               <div class="field">
                 <label for="reason">Cancellation reason</label>
@@ -1412,27 +1424,27 @@ function renderReconcile() {
         </article>
 
         <div class="form-card">
-          <label class="field">
-            <span>Cash returned</span>
-            <select name="cashReturned">
+          <div class="field">
+            <label for="cashReturned">Cash returned</label>
+            <select id="cashReturned" name="cashReturned">
               <option value="false">Not yet</option>
               <option value="true">Returned</option>
             </select>
-          </label>
-          <label class="field">
-            <span>Cheque voided</span>
-            <select name="chequeVoided">
+          </div>
+          <div class="field">
+            <label for="chequeVoided">Cheque voided</label>
+            <select id="chequeVoided" name="chequeVoided">
               <option value="false">Not yet</option>
               <option value="true">Voided</option>
             </select>
-          </label>
-          <label class="field">
-            <span>PO cancelled</span>
-            <select name="poCancelled">
+          </div>
+          <div class="field">
+            <label for="poCancelled">PO cancelled</label>
+            <select id="poCancelled" name="poCancelled">
               <option value="false">Not yet</option>
               <option value="true">Cancelled</option>
             </select>
-          </label>
+          </div>
           <div class="field">
             <label for="expensesUsed">Used expenses or notes</label>
             <textarea id="expensesUsed" name="expensesUsed">No trip expenses used before cancellation.</textarea>
@@ -1647,8 +1659,8 @@ function bindScreenEvents() {
 
   document.querySelectorAll("[data-client-cancel]").forEach((button) => {
     button.addEventListener("click", () => {
-      state.otpSent = true;
-      setToast("One-time PIN sent to authorized contact");
+      state.cancellationFormOpen = true;
+      setToast("Enter the cancellation reason, then submit to notify Roadlink.");
     });
   });
 
@@ -2098,6 +2110,7 @@ async function createTrip(event) {
 
   try {
     const result = await apiRequest("/api/trips", { method: "POST", body: JSON.stringify({ trip }) });
+    if (result.demoClientToken) state.demoClientTokens[(result.trip || trip).id] = result.demoClientToken;
     syncTripFromServer(result.trip || trip);
     state.selectedTripId = (result.trip || trip).id;
     state.screen = "detail";
@@ -2152,9 +2165,9 @@ async function saveBudget(event) {
 
 async function confirmTrip(tripId) {
   try {
-    const params = new URLSearchParams(window.location.search);
-    const result = await apiRequest("/api/client-action", { method: "POST", body: JSON.stringify({ tripId, action: "confirm", token: params.get("token") || "" }) });
-    syncTripFromServer(result.trip);
+    const result = await apiRequest("/api/client-action", { method: "POST", body: JSON.stringify({ tripId, action: "confirm", token: clientActionToken(tripId) }) });
+    if (state.session) await loadSessionState();
+    else syncTripFromServer(result.trip);
   } catch (error) {
     if (state.dataMode !== "offline-demo") {
       setToast(error?.message || "Confirmation was not recorded. Please try again.", 6000);
@@ -2173,8 +2186,7 @@ async function confirmTrip(tripId) {
 
 async function contactRoadlink(tripId) {
   try {
-    const params = new URLSearchParams(window.location.search);
-    await apiRequest("/api/client-action", { method: "POST", body: JSON.stringify({ tripId, action: "contact", token: params.get("token") || "" }) });
+    await apiRequest("/api/client-action", { method: "POST", body: JSON.stringify({ tripId, action: "contact", token: clientActionToken(tripId) }) });
   } catch (error) {
     if (state.dataMode !== "offline-demo") {
       setToast(error?.message || "Roadlink was not notified. Please call the coordinator directly.", 6000);
@@ -2188,9 +2200,9 @@ async function contactRoadlink(tripId) {
 async function cancelTrip(tripId) {
   const reason = document.querySelector("#reason")?.value || "Client cancelled through secure link.";
   try {
-    const params = new URLSearchParams(window.location.search);
-    const result = await apiRequest("/api/client-action", { method: "POST", body: JSON.stringify({ tripId, action: "cancel", reason, token: params.get("token") || "" }) });
-    syncTripFromServer(result.trip);
+    const result = await apiRequest("/api/client-action", { method: "POST", body: JSON.stringify({ tripId, action: "cancel", reason, token: clientActionToken(tripId) }) });
+    if (state.session) await loadSessionState();
+    else syncTripFromServer(result.trip);
   } catch (error) {
     if (state.dataMode !== "offline-demo") {
       setToast(error?.message || "Cancellation was not recorded. Please contact Roadlink.", 6000);
@@ -2477,7 +2489,7 @@ async function initApp() {
     state.selectedTripId = tripId;
     state.clientPreviewTripId = tripId;
     state.screen = "client";
-    if (clientIntent === "cancel") state.otpSent = true;
+    if (clientIntent === "cancel") state.cancellationFormOpen = true;
     if (clientIntent === "confirm") state.toast = "Review the trip details, then tap Confirm Booking.";
     if (clientIntent === "contact") state.toast = "Tap Contact Roadlink to notify the coordinator.";
   }

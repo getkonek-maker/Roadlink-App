@@ -16,6 +16,9 @@ is a read-only management mirror.
 - Client email links open a review page and never confirm a trip automatically.
 - Staff roles are enforced by the server for every privileged action.
 - Client portal records are linked by `clientId`, not company-name matching.
+- Client-facing responses exclude internal budgets, audit history, and token hashes.
+- Staff preview mode cannot impersonate a client in production; interactive
+  confirmation previews are limited to the isolated local demo.
 - Waybill form values persist before manager approval.
 - Client confirmation, manager approval, and finance approval are required before
   accounting can log a release.
