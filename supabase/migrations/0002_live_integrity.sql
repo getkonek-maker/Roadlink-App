@@ -32,6 +32,23 @@ $$;
 create unique index if not exists reconciliation_tasks_trip_unique
   on public.reconciliation_tasks ("tripId");
 
+-- Preserve the newest pending request when a pilot/demo database already has
+-- duplicate requests for the same email. Older requests remain in the audit
+-- history but cannot be approved accidentally.
+with ranked_pending_requests as (
+  select id,
+    row_number() over (partition by lower(email) order by created_at desc, id desc) as request_rank
+  from public.account_requests
+  where status = 'Pending'
+)
+update public.account_requests
+set status = 'Superseded'
+where id in (
+  select id
+  from ranked_pending_requests
+  where request_rank > 1
+);
+
 create unique index if not exists account_requests_pending_email_unique
   on public.account_requests (lower(email))
   where status = 'Pending';
