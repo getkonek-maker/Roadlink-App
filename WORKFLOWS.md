@@ -94,11 +94,11 @@ Why use Google Sheets anyway:
 3. Open the hosted HTTPS URL on Android Chrome and choose `Install app`.
 4. Open the hosted HTTPS URL on iPhone Safari and choose `Add to Home Screen`.
 5. Keep using the same hosted URL for laptop access.
-6. Add Supabase before relying on real cross-device client confirmation links.
+6. Apply both Supabase migrations before relying on real cross-device client confirmation links.
 
 Supabase production setup checklist:
 
-- Create tables: `profiles`, `account_requests`, `clients`, `booking_requests`, `trips`, `budget_items`, `client_actions`, `reconciliation_tasks`, `audit_events`, `notifications`, `sheet_sync_log`.
+- Apply `0001_init.sql` and then `0002_live_integrity.sql`.
 - Enable Row Level Security on all exposed tables.
 - Staff roles can read/write only their workflow areas.
 - Client users can read only bookings and booking requests tied to their company.
@@ -107,7 +107,7 @@ Supabase production setup checklist:
 
 Why Supabase is needed before production:
 
-- The current demo stores trip records in the browser session.
+- Local-demo mode stores records on one machine and is only for presentations.
 - A real confirmation email link must look up the trip from a shared database.
 - Manager approvals, accounting actions, audit trails, and client confirmations should persist across staff devices.
 

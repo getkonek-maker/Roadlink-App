@@ -1,4 +1,4 @@
-const CACHE_NAME = "roadlink-trip-control-v6";
+const CACHE_NAME = "roadlink-trip-control-v7";
 
 const STATIC_ASSETS = [
   "./",
@@ -13,8 +13,7 @@ const STATIC_ASSETS = [
   "./assets/pwa-icon-512.png",
   "./assets/pwa-icon-maskable-512.png",
   "./assets/pwa-icon.svg",
-  "./assets/pwa-icon-maskable.svg",
-  "./assets/roadlink-home.mov"
+  "./assets/pwa-icon-maskable.svg"
 ];
 
 self.addEventListener("install", (event) => {

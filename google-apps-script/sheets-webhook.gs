@@ -9,16 +9,14 @@
  * Setup:
  * 1. Create a Google Sheet named e.g. "Roadlink Trip Control Mirror".
  * 2. Extensions → Apps Script, paste this file.
- * 3. Set SHARED_SECRET below to a long random string.
+ * 3. In Apps Script Project Settings, add a script property named
+ *    ROADLINK_WEBHOOK_SECRET with a long random value.
  * 4. Deploy → New deployment → Web app:
  *      - Execute as: Me
  *      - Who has access: Anyone (the secret gates real use)
- * 5. Put the web app URL in the server env as GOOGLE_SHEETS_WEBHOOK_URL, and
- *    append the secret as a query parameter:
- *      GOOGLE_SHEETS_WEBHOOK_URL=https://script.google.com/macros/s/…/exec?secret=YOUR_SECRET
+ * 5. Put the web app URL in GOOGLE_SHEETS_WEBHOOK_URL and the same secret in
+ *    GOOGLE_SHEETS_WEBHOOK_SECRET on the Roadlink server.
  */
-
-var SHARED_SECRET = "CHANGE_ME_LONG_RANDOM_SECRET";
 
 var TABS = {
   TRIPS: "Trips",
@@ -40,12 +38,11 @@ var HEADERS = {
 
 function doPost(e) {
   try {
-    var secret = (e && e.parameter && e.parameter.secret) || "";
-    if (SHARED_SECRET && secret !== SHARED_SECRET) {
+    var expectedSecret = PropertiesService.getScriptProperties().getProperty("ROADLINK_WEBHOOK_SECRET") || "";
+    var body = JSON.parse((e && e.postData && e.postData.contents) || "{}");
+    if (!expectedSecret || body.secret !== expectedSecret) {
       return respond(403, { ok: false, message: "Invalid webhook secret." });
     }
-
-    var body = JSON.parse((e && e.postData && e.postData.contents) || "{}");
     if (body.source !== "roadlink-trip-control") {
       return respond(400, { ok: false, message: "Unknown source." });
     }

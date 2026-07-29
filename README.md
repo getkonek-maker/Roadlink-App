@@ -1,6 +1,12 @@
 # Roadlink Trip Control
 
-Phone-first production pilot prototype for Roadlink staff, with an optional client portal preview.
+Phone-first operations application for Roadlink staff, with an optional client portal.
+
+The application now includes production hardening for protected file serving,
+HTTP-only sessions, server-authoritative writes, approval sequencing, hashed
+client links, persisted waybills, reconciliation controls, and automated tests.
+It remains in **production pilot** status until the infrastructure checklist in
+[`LIVE_OPERATIONS_CHECKLIST.md`](LIVE_OPERATIONS_CHECKLIST.md) is completed.
 
 This standalone project is separate from DoctorsAssistant. It demonstrates the core Roadlink workflow:
 
@@ -66,6 +72,8 @@ Production environment variables:
 - `SUPABASE_SERVICE_ROLE_KEY`: private server-only key for controlled writes, approvals, and audit entries.
 - `PASSWORD_PEPPER`: private string used for local demo password hashes.
 - `GOOGLE_SHEETS_WEBHOOK_URL`: optional Apps Script web app URL for the readable spreadsheet mirror.
+- `GOOGLE_SHEETS_WEBHOOK_SECRET`: shared secret stored in Render and Apps Script properties.
+- `APP_ORIGIN`: canonical deployed URL used in client and account emails.
 
 Email actions currently supported:
 
@@ -203,9 +211,11 @@ Completed:
 
 Still to do before live operations:
 
-- Create the Supabase tables and Row Level Security policies.
-- Add the Supabase and Google Sheets environment variables in Render.
+- Apply `supabase/migrations/0002_live_integrity.sql`.
+- Complete every item in `LIVE_OPERATIONS_CHECKLIST.md`.
+- Add and verify the Supabase, app-origin, and Google Sheets environment variables in Render.
 - Verify a Roadlink sending domain in Resend.
-- Replace demo users/passwords with approved production users.
+- Rotate development credentials and replace demo users/passwords with approved production users.
+- Upgrade Render from the free tier to an always-on instance.
 - Run a private pilot with sample trips before real cash disbursement.
 - Integrate SSD GPS Philippines once API or tracking-link access is available.

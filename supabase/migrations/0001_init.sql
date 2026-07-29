@@ -25,14 +25,14 @@ create table public.clients (
 
 create table public.profiles (
   id text primary key,
-  -- Link to Supabase Auth once production auth is enabled (Phase 4).
+  -- Reserved for an optional future Supabase Auth migration.
   auth_user_id uuid unique references auth.users(id) on delete set null,
   name text not null,
   email text unique not null,
   role text not null check (role in ('admin','owner','coordinator','accounting','client')),
   "roleLabel" text default '',
   username text unique,
-  -- Local-demo credential hash. Unused once Supabase Auth is the login path.
+  -- Salted scrypt credential hash managed by the Roadlink server.
   "passwordHash" text default '',
   company text default '',
   phone text default '',
@@ -206,10 +206,9 @@ create index notifications_role_idx on public.notifications (role);
 create index booking_requests_company_idx on public.booking_requests (company);
 
 -- ---------------------------------------------------------------------------
--- Optional: seed staff profiles for the internal pilot (local-demo style
--- logins while Supabase Auth is being set up). Replace THE_PEPPER with the
+-- Optional: seed staff profiles for the internal pilot. Replace THE_PEPPER with the
 -- exact PASSWORD_PEPPER value from the server environment, and replace the
--- passwords before running. Delete these rows once Supabase Auth is live.
+-- passwords before running. Never use these sample credentials for operations.
 -- ---------------------------------------------------------------------------
 
 -- insert into public.profiles (id, name, email, role, "roleLabel", username, "passwordHash", company, status, initials)
