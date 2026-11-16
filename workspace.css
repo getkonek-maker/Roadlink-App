@@ -55,6 +55,35 @@ body.mobile-preview .work-row button { width: 100%; }
 .workspace-shell .home-actions { width: min(340px, 100%); justify-self: center; gap: 10px; }
 .workspace-shell .home-actions > .home-tour-link { min-height: 32px; padding: 3px 8px; }
 .workspace-shell .home-video { object-position: center; }
+.workspace-shell .home-hero { grid-template-rows: auto minmax(0, 1fr); gap: 24px; }
+.entry-dialog { align-self: center; justify-self: center; width: min(420px, 100%); padding: 28px; border-radius: 8px; background: white; box-shadow: 0 16px 48px #07152740; }
+.entry-dialog h1 { margin: 0 0 12px; color: #182d45; font-size: 26px; line-height: 1.2; }
+.entry-dialog p { margin: 0 0 24px; color: #5b6c80; font-size: 14px; line-height: 1.5; }
+.entry-choices { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.entry-choices button { min-height: 48px; padding: 10px; font-size: 15px; }
+.role-entry-dialog { padding: 28px !important; border: 1px solid #dce3eb; border-radius: 8px; background: white; box-shadow: 0 8px 30px #172b4710; }
+.workspace-shell .role-entry-dialog h1 { font-size: 25px; line-height: 1.25; }
+.workspace-shell .role-entry-dialog p { margin-top: 12px; font-size: 14px; }
+.workspace-shell .client-portal-hero { background: white; color: #182d45; border-bottom: 1px solid #dce3eb; padding: 22px max(22px, calc((100% - 1236px)/2)); }
+.workspace-shell .client-portal-hero img { width: min(300px, 100%); margin-bottom: 14px; }
+.workspace-shell .client-portal-hero h1 { color: #182d45; font-size: 24px; line-height: 1.3; }
+.workspace-shell .client-portal-hero p { color: #647286; margin-top: 5px; }
+.portal-bookings { margin-top: 26px; }
+.portal-bookings .client-trip-card { border-radius: 6px; }
+@media (max-width: 600px) { .entry-dialog { padding: 22px; } .entry-dialog h1 { font-size: 23px; } }
+@media (max-height: 450px) {
+  .workspace-shell .home-hero { padding: 16px; gap: 12px; }
+  .workspace-shell .home-logo { width: 240px; }
+  .entry-dialog { padding: 18px; }
+  .entry-dialog h1 { font-size: 22px; margin-bottom: 8px; }
+  .entry-dialog p { margin-bottom: 14px; }
+  .workspace-shell .auth-screen { padding: 16px 24px; justify-content: center; }
+  .workspace-shell .role-entry-dialog { gap: 12px; padding: 18px !important; }
+  .role-entry-dialog .auth-logo { width: 180px; }
+  .workspace-shell .role-entry-dialog h1 { font-size: 22px; }
+  .workspace-shell .role-entry-dialog p { margin-top: 6px; }
+  .role-entry-dialog .account-signin-link { min-height: 32px; font-size: 12px; }
+}
 .workspace-shell .auth-screen { justify-content: center; padding: 48px 24px; background: #f4f6f9; }
 .workspace-shell .auth-panel { width: min(440px, 100%); margin-inline: auto; padding: 0; }
 .workspace-shell .auth-back { position: absolute; top: 24px; left: 24px; }

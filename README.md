@@ -24,13 +24,12 @@ This standalone project is separate from DoctorsAssistant. It demonstrates the c
 
 ## Guided Walkthrough
 
-Choose **Take a guided tour** on the home/login screen or **?** in a screen's
-header. Opening `/?walkthrough=2` starts the tour automatically.
-
-The 15-step quick tour shows the actual app screens with a sample Cebu-to-Leyte
-trip. Each dialog uses a short, plain-language paragraph. It covers booking,
-client confirmation, waybills, approvals, fund releases, cancellation checking,
-audit history, and the client portal with an optional hands-on chat demo.
+The demo starts with a Staff / Client portal dialog over the Roadlink video.
+Staff choose a role and Continue. Clients enter directly, without credentials.
+The matching role guide starts automatically: six steps for coordinator,
+manager, or accounting; three for admin; five for client.
+Guides never switch roles. Each shows only that role's actions and handoffs
+using sample records. Use **?** or Guided tour to replay the current role guide.
 Short dialogs appear inside the app beside a highlighted control, with Back,
 Next, and Skip tour. There is no separate instructions panel or phone frame.
 
@@ -40,13 +39,13 @@ and exiting restores the original screen, records, role, and session.
 ## Web And Phone Demo
 
 - Password-free role chooser: `https://roadlink-trip-control.netlify.app/?demo=choose`
-- Web workspace: `https://roadlink-trip-control.netlify.app/?demo=1`
-- In-app guided tour: `https://roadlink-trip-control.netlify.app/?demo=1&walkthrough=2`
+- Direct coordinator workspace: `https://roadlink-trip-control.netlify.app/?demo=coordinator`
+- Guided coordinator workspace: `https://roadlink-trip-control.netlify.app/?demo=coordinator&walkthrough=2`
 - Client demo: `https://roadlink-trip-control.netlify.app/?demo=client`
 - Phone layout on a laptop: add `&mobile=1`; actual phones adapt automatically.
 
-The demo entry lets visitors select Coordinator, Manager, Accounting, Admin,
-or Client without credentials. This opens isolated sample data, not a real
+The demo entry first separates Staff and Client. Staff then choose Coordinator,
+Manager, Accounting, or Admin without credentials. This opens sample data, not a real
 account. Real staff/client account sign-in remains available separately and
 still requires credentials. Anonymous demo entry does not call the backend.
 
@@ -68,8 +67,9 @@ The desktop workspace has a sidebar, trip table, waybill approval queue, and
 two-column booking form. Phones show the compact trip list and single-column
 forms. Both use the same app, branding, PWA icon, and operating workflows.
 
-The staff demo lets presenters preview coordinator, manager, accounting, and
-admin roles. The client demo opens separately. Bookings, approvals, releases, client responses,
+Use Switch access to return to the entry dialog and choose another role.
+The compact toolbar no longer repeats role selectors or external demo links.
+Bookings, approvals, releases, client responses,
 and reconciliation operate on isolated sample records in browser memory. No
 database writes or emails are sent. Refresh starts fresh; exiting restores any
 prior session. Demo chat still uses sessionStorage for local conversations.
@@ -83,7 +83,8 @@ public files and assets enter `dist/`. Secrets and backend source are excluded.
 Choose **Trip messages (Demo)** inside a staff trip or client booking.
 The sender is fixed to the current account; there is no staff/client identity
 switch inside chat. Staff and client demos have separate entrances. Suggested
-replies and Reset demo are available. The tour ends with a client demo link.
+replies and Reset demo are available. The client guide explains messaging
+without changing the sender's role.
 
 Demo conversations are isolated per trip in the current browser tab's
 `sessionStorage`. They survive refreshes in that tab; they are not delivered to

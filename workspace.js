@@ -66,6 +66,11 @@
     render();
   }
 
+  function enterGuidedDemo(role) {
+    startDemo(role);
+    window.roadlinkWalkthrough.start();
+  }
+
   function navigationItems() {
     const count = (status) => state.trips.filter((trip) => activeTrip(trip) && trip.waybill.status === status).length;
     const checks = state.trips.filter((trip) => trip.status === "needs").length;
@@ -92,8 +97,7 @@
     mobileNav.innerHTML = `${items.slice(0, 3).map(navButton).join("")}<details class="mobile-more"><summary>More</summary><div>${items.slice(3).map(navButton).join("")}<button type="button" data-workspace-tour>Guided tour</button>${demoActive ? `<button type="button" data-workspace-access>Choose demo access</button>` : `<button type="button" data-workspace-logout>Sign out</button>`}</div></details>`;
     const toolbar = document.querySelector("#demoToolbar");
     toolbar.hidden = !demoActive || locked;
-    const otherDemoUrl = `?demo=${client ? "choose" : "client"}${document.body.classList.contains("mobile-preview") ? "&mobile=1" : ""}`;
-    toolbar.innerHTML = demoActive ? `<span class="workspace-demo-label">${client ? "Client demo" : "Staff demo"}</span>${client ? `<span>Ana Lim</span>` : `<label for="demoRole">Preview role</label><select id="demoRole">${roles.map((role) => `<option value="${role.id}" ${demoRole === role.id ? "selected" : ""}>${role.label}</option>`).join("")}</select>`}<a class="workspace-demo-link" href="${otherDemoUrl}" target="_blank" rel="noopener">${client ? "Open staff demo" : "Open client demo"}</a><button type="button" data-workspace-phone>${document.body.classList.contains("mobile-preview") ? "Desktop view" : "Phone view"}</button><button type="button" data-workspace-exit>Exit demo</button>` : "";
+    toolbar.innerHTML = demoActive ? `<span class="workspace-demo-label">Sample data · ${client ? "Client" : roleLabel()}</span><button type="button" data-workspace-access>Switch access</button>${document.body.classList.contains("mobile-preview") ? `<button type="button" class="demo-layout-button" data-workspace-phone>Desktop view</button>` : ""}` : "";
     nav.inert = locked;
     toolbar.inert = locked;
     document.querySelectorAll("[data-workspace-nav]").forEach((button) => button.addEventListener("click", () => {
@@ -106,14 +110,13 @@
       } else navigate(screen);
     }));
     document.querySelectorAll("[data-workspace-tour]").forEach((button) => button.addEventListener("click", () => window.roadlinkWalkthrough.start()));
-    document.querySelector("[data-workspace-access]")?.addEventListener("click", () => navigate("login"));
+    document.querySelectorAll("[data-workspace-access]").forEach((button) => button.addEventListener("click", () => navigate("home")));
     document.querySelector("[data-workspace-logout]")?.addEventListener("click", logoutCurrentUser);
     document.querySelectorAll("[data-workspace-phone]").forEach((button) => button.addEventListener("click", () => {
       const mobile = document.body.classList.toggle("mobile-preview");
       const url = new URL(location.href); if (mobile) url.searchParams.set("mobile", "1"); else url.searchParams.delete("mobile"); history.replaceState(null, "", url);
       renderChrome();
     }));
-    toolbar.querySelector("#demoRole")?.addEventListener("change", (event) => startDemo(event.target.value));
     toolbar.querySelector("[data-workspace-exit]")?.addEventListener("click", closeDemo);
   }
 
@@ -165,5 +168,5 @@
     throw new Error("This action is available in the connected app. The current workspace uses sample data.");
   }
 
-  window.roadlinkWorkspace = { renderChrome, startDemo, closeDemo, request, get demoActive() { return demoActive; } };
+  window.roadlinkWorkspace = { renderChrome, startDemo, enterGuidedDemo, closeDemo, request, get demoActive() { return demoActive; } };
 })();

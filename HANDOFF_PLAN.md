@@ -16,38 +16,32 @@
 
 ## Responsive Web Demo Release
 
-- Public guided walkthrough: `https://roadlink-trip-control.netlify.app/?demo=1&walkthrough=2`
-- Desktop workspace: `https://roadlink-trip-control.netlify.app/?demo=1`
-- Phone demo on a laptop: add `&mobile=1`. Actual phones adapt automatically.
-- Public hands-on chat preview: `https://roadlink-app.onrender.com/?chat-demo=1`
-- Both routes work without creating a staff/client account. They use isolated
-  sample data and preserve any signed-in session on exit.
-- Asset/cache release marker: `web-app-v14`; PWA cache version 14.
-- Password-free demo entry: `https://roadlink-trip-control.netlify.app/?demo=choose`.
-- Latest role-workload update: role-specific home screens and navigation,
-  stage-specific approval buttons, manager read-only cancellation checking,
-  and backend rejection of admin financial actions. Ten automated tests plus
-  browser checks cover demo entry, roles, approvals, and phone navigation.
-  Real login was not bypassed. Deploy the backend commit on Render as well as
-  the frontend on Netlify so server authorization changes are active.
-- Client demo: `https://roadlink-trip-control.netlify.app/?demo=client`.
-- November 16 update: 15 short in-app tour steps; separate staff/client demo
-  entrances; chat sender follows the current account. Nine automated tests and
-  browser checks across desktop, phone, and landscape pass. This remains a demo:
-  no external chat delivery or email activation is added in this release.
-- The tour now uses small in-app spotlight dialogs, not a separate side panel.
-  Back, Next, Skip, focus management, responsive positioning, and restoration
-  cover all 15 short steps on desktop, phone, and landscape.
-- Desktop navigation, trip table, waybill approval queue, two-column booking
-  forms, role switching, and compact phone layout share the same application.
-- `?demo=1` runs the entire booking/approval/release/cancellation/reconciliation
-  workflow on isolated sample records. Demo mode never calls the real API.
-- Verified chat replies in both directions, unread and local read states,
-  draft preservation, refresh persistence, per-trip isolation, text escaping,
-  reset, and the tour-to-chat handoff. Neither demo sends API mutations.
-- This chat release is a presentation preview. Shared live messaging still
-  requires authorized server storage, delivery, read receipts, and notification
-  infrastructure. It does not require replacing the demo UI.
+- Main demo: `https://roadlink-trip-control.netlify.app/?demo=choose`.
+- Entry: Staff / Client dialog over the fleet video. Staff choose a role;
+  clients enter directly. No demo credentials, tour links, or extra footer CTAs.
+- Role guides start automatically after entry and keep the same identity:
+  coordinator 6 steps, manager 6, accounting 6, admin 3, client 5.
+- Direct workspaces: `?demo=coordinator`, `owner`, `accounting`, `admin`,
+  or `client`. Add `&walkthrough=2` for the selected role's guide.
+- Legacy generic `?demo=1&walkthrough=2` links now open the entry dialog.
+- Phone demo: add `&mobile=1`. Actual phones adapt automatically.
+- Asset/cache release marker: `web-app-v15`; PWA cache version 15.
+- Role-specific tasks and nav, stage-specific approvals, read-only manager
+  checking, and backend rejection of admin financial actions remain in place.
+- Switch access returns to the entry dialog. Toolbar and client portal layout
+  are simplified. Confirmed client bookings now show a cancellation action and
+  reason field; empty cancellation reasons are blocked.
+- Ten automated tests pass. Browser tests cover every role guide at desktop,
+  phone, narrow-phone, and landscape sizes, constant identity, real highlighted
+  controls, replay, Escape, state restoration, client cancellation, and zero
+  backend calls. No shared live chat or email activation is added.
+- Demo records stay in memory; chat stays in tab sessionStorage. Real account
+  sign-in is separate and still requires credentials. Guides restore the
+  preceding records and session on exit.
+- Earlier deployment commits: `4bc5d5d` responsive workspace, `7c63f86`
+  15-step global tour and chat identity, `5c5c00b` role workloads and demo access.
+- Publish frontend dist to the existing Netlify site. Push main for Render
+  auto-deploy; do not upload secrets or backend files as frontend assets.
 
 ## Current Architecture
 
@@ -58,8 +52,8 @@
   selection, presentation records, and simulated API responses. No real writes.
 - `netlify.toml`: frontend publishing and same-origin `/api/*` proxy to Render.
 - `scripts/build-web.mjs`: explicit public-file build into ignored `dist/`.
-- `walkthrough.js`: isolated 15-step quick tour, launched from home/login,
-  header help, or `?walkthrough=2`. It reuses real screens, restores application
+- `walkthrough.js`: isolated per-role short guides, launched after role entry
+  or header help. It reuses real screens, restores application
   state on exit, and prevents all API calls while active. No server writes.
 - `demo-chat.js`: per-trip messaging preview, launched by `?chat-demo=1`, Trip
   messages buttons. Locks sender identity to the active account, with no switch

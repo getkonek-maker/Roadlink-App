@@ -2,25 +2,21 @@
 
 ## Learn In The App
 
-Open `/?demo=1&walkthrough=2` or choose **Take a guided tour**. The guided dialogs
-use 15 short steps to explain who performs each action and what to choose using one
-sample trip. Each short dialog appears inside the app and highlights the
-relevant control. Use **Back**, **Next**, or **Skip tour**. Finish returns to an
-explorable sample workspace rather than a presentation panel.
-
-The tour switches sample roles automatically and never changes saved records
-or sends an email. Finish returns to the starting screen. The **?** in screen
-headers reopens it. GPS tracking and invoices remain future work.
+Open `/?demo=choose`. Choose Staff or Client portal in the login dialog.
+Staff then select a role and Continue; clients enter directly.
+The selected role's guide starts automatically and never changes roles.
+Coordinator, manager, and accounting have six short steps each; admin has
+three and client has five. Use Back, Next, or Skip tour. Finishing restores
+your sample workspace without changing records or sending emails.
+The question mark replays your current role guide.
 
 ## Demo On A Laptop Or Phone
 
-Open `/?demo=choose`, choose a role, and press Enter demo. No username or
-password is needed for sample records. The real account sign-in links still
-require credentials. The same chooser is available from the home page.
-
-Open `https://roadlink-trip-control.netlify.app/?demo=1` for the full desktop
-workspace. Use the Preview role selector to change staff roles and follow the same trip
-through each approval. Phone view narrows the layout for laptop presentations;
+No username or password is needed for the demo. Real account sign-in still
+requires credentials. Use Switch access to return to Staff / Client selection.
+Direct staff links use `?demo=coordinator`, `owner`, `accounting`, or `admin`.
+Add `&walkthrough=2` to open that role's guide immediately.
+Phone view narrows the layout for laptop presentations;
 actual phones use their own full screen automatically. Desktop view returns to
 the table and sidebar.
 
@@ -39,7 +35,7 @@ On a phone, the role navigation is at the bottom; More contains other destinatio
 
 ## Trip Messages Preview
 
-1. Open the staff demo at `/?demo=1` or the client demo at `/?demo=client`.
+1. Open the staff demo at `/?demo=coordinator` or the client demo at `/?demo=client`.
 2. Open a trip or booking, then choose Trip messages.
 3. Write a message or choose a suggested reply, then Send. Your sender identity
    stays fixed to your current account; there is no switch inside chat.

@@ -570,12 +570,11 @@ function renderHome() {
       <div class="home-shade" aria-hidden="true"></div>
       <div class="home-hero">
         <img class="home-logo" src="assets/roadlink-logo-home.svg" alt="Roadlink Cargo Transport Service">
-        <div class="home-actions">
-          <button class="primary wide home-login" type="button" data-action="login">Open Roadlink demo</button>
-          <button class="ghost wide home-client-login" type="button" data-action="clientLogin">${state.dataMode === "supabase" ? "Client portal" : "Client portal preview"}</button>
-          <button class="home-tour-link" type="button" data-action="startWalkthrough">Take a guided tour</button>
-          <button class="home-tour-link" type="button" data-action="startDemo">Explore the demo</button>
-          <span>${state.operationalReady ? "Live Operations" : (state.dataMode === "supabase" ? "Production Pilot" : "Demo Mode")}</span>
+        <div class="entry-dialog" role="dialog" aria-labelledby="entryTitle" aria-describedby="entryHint">
+          <h1 id="entryTitle">Welcome to Roadlink</h1>
+          <p id="entryHint">Choose Staff or Client portal to start your demo.</p>
+          <div class="entry-choices"><button class="primary" type="button" data-action="login">Staff</button>
+          <button class="secondary" type="button" data-action="startClientDemo">Client portal</button></div>
         </div>
       </div>
       ${state.toast ? `<div class="toast">${state.toast}</div>` : ""}
@@ -587,17 +586,15 @@ function renderLogin() {
   return `
     <section class="screen auth-screen">
       <button class="tiny-btn auth-back" type="button" data-action="home">Back</button>
-      <div class="auth-panel">
+      <div class="auth-panel role-entry-dialog" role="dialog" aria-labelledby="staffRoleTitle" aria-describedby="staffRoleHint">
         <img class="auth-logo" src="assets/roadlink-logo.svg" alt="Roadlink Cargo Transport Service">
-        <div><p class="eyebrow">Roadlink demo</p><h1>Choose your access</h1><p>Sample records only. No password needed.</p></div>
+        <div><h1 id="staffRoleTitle">Choose your staff role</h1><p id="staffRoleHint">Pick a role for a short walkthrough of your work. No password needed.</p></div>
         <form class="login-form" id="demoAccessForm">
           <div class="field"><label for="loginRole">Role</label><select id="loginRole" name="role">
             ${roles.map((role) => `<option value="${role.id}" ${state.role === role.id ? "selected" : ""}>${role.label}</option>`).join("")}
-            <option value="client">Client</option>
           </select></div>
-          <button class="primary wide" type="submit">Enter demo</button>
+          <button class="primary wide" type="submit">Continue</button>
         </form>
-        <button class="ghost wide" type="button" data-action="startWalkthrough">Take a guided tour</button>
         <button class="account-signin-link" type="button" data-action="liveLogin">Sign in to a real staff account</button>
       </div>
     </section>`;
@@ -642,12 +639,6 @@ function renderStaffAccountLogin() {
 
         <button class="ghost wide" type="button" data-action="forgotPassword">Forgot password?</button>
         <button class="ghost wide" type="button" data-action="accountRequest">Create account request</button>
-        <button class="ghost wide" type="button" data-action="startWalkthrough">Take a guided tour</button>
-
-        ${state.dataMode === "supabase" ? "" : `<div class="login-hint">
-          <strong>Demo credentials</strong>
-          ${roles.map((role) => `<span>${role.label}: ${role.username} / ${role.password}</span>`).join("")}
-        </div>`}
       </div>
       ${state.toast ? `<div class="toast">${state.toast}</div>` : ""}
     </section>
@@ -735,10 +726,6 @@ function renderClientAccountLogin() {
 
         <button class="ghost wide" type="button" data-action="forgotPassword">Forgot password?</button>
 
-        ${production ? "" : `<div class="login-hint">
-          <strong>Demo client</strong>
-          <span>${client.company}: ${client.username} / ${client.password}</span>
-        </div>`}
       </div>
       ${state.toast ? `<div class="toast">${state.toast}</div>` : ""}
     </section>
@@ -769,10 +756,9 @@ function renderClientPortal() {
     <section class="screen">
       ${topbar("Client Portal", `<button class="tiny-btn" type="button" data-action="logoutClient">Exit</button>`)}
       <div class="client-portal-hero">
-        <img src="assets/roadlink-logo-light.svg" alt="Roadlink Cargo Transport Service">
-        <span>${state.dataMode === "supabase" ? "Client account" : "Preview account"}</span>
+        <img src="assets/roadlink-logo.svg" alt="Roadlink Cargo Transport Service">
         <h1>${client.company}</h1>
-        <p>Simple booking visibility for authorized client contacts.</p>
+        <p>${client.contact}</p>
       </div>
       <div class="content">
         <button class="primary wide" type="button" data-action="clientBooking">Request new booking</button>
@@ -781,11 +767,10 @@ function renderClientPortal() {
           <div class="metric"><b>${requests.length}</b><span>Requests</span></div>
         </div>
 
-        <article class="card">
+        <section class="portal-bookings">
           <div class="section-head">
             <div>
               <h3>Active bookings</h3>
-              <p>Clients see trip status only. Internal budgets and audit logs stay hidden.</p>
             </div>
           </div>
           <div class="cards thin-cards">
@@ -797,9 +782,9 @@ function renderClientPortal() {
               </button>
             `).join("") || `<span class="muted">No active bookings yet.</span>`}
           </div>
-        </article>
+        </section>
 
-        <article class="card">
+        <section class="portal-bookings">
           <div class="section-head">
             <div>
               <h3>Booking requests</h3>
@@ -815,7 +800,7 @@ function renderClientPortal() {
               </div>
             `).join("") || `<span class="muted">No client requests yet.</span>`}
           </div>
-        </article>
+        </section>
       </div>
       ${state.toast ? `<div class="toast">${state.toast}</div>` : ""}
     </section>
@@ -900,14 +885,17 @@ function renderClientBookingDetail() {
             <span><b>Trip Date</b>${displayDate(trip.date)}</span>
             <span><b>Cargo</b>${trip.cargo || "None provided"}</span>
           </div>
-          ${trip.status === "pending" ? `
+          ${activeTrip(trip) ? `
             <div class="actions">
-              <button class="success" type="button" data-client-confirm="${trip.id}">Confirm Booking</button>
+              ${trip.status === "pending" ? `<button class="success" type="button" data-client-confirm="${trip.id}">Confirm Booking</button>` : ""}
               <button class="danger" type="button" data-client-cancel="${trip.id}">Cancel Booking</button>
             </div>
+            ${state.cancellationFormOpen ? `<div class="field"><label for="reason">Cancellation reason</label>
+              <textarea id="reason" placeholder="Why is the booking being cancelled?" required></textarea>
+              <button class="danger wide" type="button" data-complete-cancel="${trip.id}">Submit cancellation</button></div>` : ""}
           ` : ""}
           <button class="ghost" type="button" data-call-roadlink="${trip.id}">Contact Roadlink</button>
-          <button class="secondary" type="button" data-action="chatClient">Trip messages <span class="chat-inline-badge">Demo</span></button>
+          <button class="secondary chat-entry" type="button" data-action="chatClient">Trip messages <span class="chat-inline-badge">Demo</span></button>
         </article>
       </div>
       ${state.toast ? `<div class="toast">${state.toast}</div>` : ""}
@@ -1500,7 +1488,7 @@ function renderClientPreview() {
 
   return `
     <section class="screen client-preview">
-      <button class="tiny-btn" type="button" data-action="back">Back to staff app</button>
+      ${state.session || state.clientSession ? `<button class="tiny-btn" type="button" data-action="back">${state.clientSession ? "Back to bookings" : "Back to trip"}</button>` : ""}
       <article class="client-card">
         <span class="pill">Secure Roadlink link</span>
         <h1>Please confirm your trip</h1>
@@ -1684,7 +1672,7 @@ function renderUsers() {
           </div>
         </article>
 
-        <form class="form-card" id="changePasswordForm">
+        ${production ? `<form class="form-card" id="changePasswordForm">
           <div class="field">
             <label for="currentPassword">Current password</label>
             <input id="currentPassword" name="currentPassword" type="password" autocomplete="current-password" required>
@@ -1694,7 +1682,7 @@ function renderUsers() {
             <input id="newPassword" name="newPassword" type="password" autocomplete="new-password" minlength="12" placeholder="12+ characters with upper, lower, and number" required>
           </div>
           <button class="primary wide" type="submit">Change my password</button>
-        </form>
+        </form>` : ""}
 
         ${production ? "" : `
         <form class="form-card" id="userForm">
@@ -1734,7 +1722,7 @@ function renderUsers() {
               <div>
                 <strong>${user.name}</strong>
                 <span>${user.role}${user.status === "suspended" ? " • Suspended" : ""}</span>
-                <small>${user.username}${user.password ? ` / ${user.password}` : ""}</small>
+                <small>${user.username}</small>
                 ${isUserAdmin && user.id && user.id !== state.session?.profile?.id ? `
                   <div class="actions" style="margin-top:8px;">
                     <button class="secondary" type="button" data-reset-user="${user.id}">Reset password</button>
@@ -1758,7 +1746,7 @@ function bindScreenEvents() {
   if (window.roadlinkDemoChat?.active) { window.roadlinkDemoChat.bind(); return; }
   document.querySelector("#demoAccessForm")?.addEventListener("submit", (event) => {
     event.preventDefault();
-    window.roadlinkWorkspace.startDemo(new FormData(event.currentTarget).get("role"));
+    window.roadlinkWorkspace.enterGuidedDemo(new FormData(event.currentTarget).get("role"));
   });
   if (state.screen === "reconcile" && state.role !== "accounting") {
     document.querySelectorAll("#reconcileForm input, #reconcileForm select, #reconcileForm textarea").forEach((control) => { control.disabled = true; });
@@ -1953,15 +1941,15 @@ function handleAction(action) {
   const trip = selectedTrip();
   const previous = state.screen;
   const routes = {
-    startWalkthrough: () => { if (["home", "login"].includes(state.screen)) window.roadlinkWorkspace?.startDemo(); window.roadlinkWalkthrough?.start(); },
+    startWalkthrough: () => { if (["home", "login"].includes(state.screen)) navigate("home"); else window.roadlinkWalkthrough?.start(); },
     startDemo: () => navigate("login"),
-    startClientDemo: () => window.roadlinkWorkspace?.startDemo("client"),
+    startClientDemo: () => window.roadlinkWorkspace?.enterGuidedDemo("client"),
     liveLogin: () => openAccountLogin("liveLogin"),
     liveClientLogin: () => openAccountLogin("liveClientLogin"),
     chatStaff: () => window.roadlinkDemoChat?.start(trip),
     chatClient: () => window.roadlinkDemoChat?.start(trip),
     back: () => {
-      state.screen = previous === "client" ? "detail" : (["login", "liveLogin", "clientLogin", "liveClientLogin", "accountRequest"].includes(previous) ? "home" : roleHomeScreen());
+      state.screen = previous === "client" ? (state.clientSession ? "clientPortal" : "detail") : (["login", "liveLogin", "clientLogin", "liveClientLogin", "accountRequest"].includes(previous) ? "home" : roleHomeScreen());
       render();
     },
     home: () => navigate("home"),
@@ -2372,7 +2360,8 @@ async function contactRoadlink(tripId) {
 }
 
 async function cancelTrip(tripId) {
-  const reason = document.querySelector("#reason")?.value || "Client cancelled through secure link.";
+  const reason = document.querySelector("#reason")?.value.trim();
+  if (!reason) { setToast("Enter a cancellation reason."); return; }
   try {
     const result = await apiRequest("/api/client-action", { method: "POST", body: JSON.stringify({ tripId, action: "cancel", reason, token: clientActionToken(tripId) }) });
     if (state.session) await loadSessionState();
@@ -2625,9 +2614,11 @@ async function convertBookingRequest(requestId) {
 async function initApp() {
   const launchParams = new URLSearchParams(window.location.search);
   if (launchParams.get("mobile") === "1") document.body.classList.add("mobile-preview");
+  if (launchParams.has("walkthrough") && !launchParams.has("demo") && !launchParams.has("trip")) { navigate("home"); return; }
   if (launchParams.has("demo")) {
-    if (launchParams.get("demo") === "choose") { navigate("login"); return; }
-    window.roadlinkWorkspace.startDemo(launchParams.get("demo"));
+    const requestedRole = launchParams.get("demo");
+    if (requestedRole !== "client" && !roles.some((role) => role.id === requestedRole)) { navigate("home"); return; }
+    window.roadlinkWorkspace.startDemo(requestedRole);
     if (launchParams.has("walkthrough")) window.roadlinkWalkthrough.start();
     else if (launchParams.has("chat-demo")) window.roadlinkDemoChat.start();
     return;
