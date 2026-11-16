@@ -518,6 +518,8 @@ function render() {
   const views = {
     home: renderHome,
     login: renderLogin,
+    liveLogin: renderStaffAccountLogin,
+    liveClientLogin: renderClientAccountLogin,
     forgotPassword: renderForgotPassword,
     clientLogin: renderClientLogin,
     clientPortal: renderClientPortal,
@@ -525,6 +527,10 @@ function render() {
     clientBookingDetail: renderClientBookingDetail,
     accountRequest: renderAccountRequest,
     dashboard: renderDashboard,
+    tasks: renderTaskHome,
+    managerApprovals: renderWaybillQueue,
+    financeApprovals: renderWaybillQueue,
+    disbursements: renderDisbursements,
     newTrip: renderNewTrip,
     detail: renderDetail,
     budget: renderBudget,
@@ -544,7 +550,7 @@ function render() {
 }
 
 function topbar(title, right = "") {
-  const back = state.screen === "dashboard" || state.screen === "login"
+  const back = ["dashboard", "tasks", "login"].includes(state.screen)
     ? `<span></span>`
     : `<button class="icon-btn" type="button" data-action="back" aria-label="Go back">&lt;</button>`;
 
@@ -565,7 +571,7 @@ function renderHome() {
       <div class="home-hero">
         <img class="home-logo" src="assets/roadlink-logo-home.svg" alt="Roadlink Cargo Transport Service">
         <div class="home-actions">
-          <button class="primary wide home-login" type="button" data-action="login">Staff log in</button>
+          <button class="primary wide home-login" type="button" data-action="login">Open Roadlink demo</button>
           <button class="ghost wide home-client-login" type="button" data-action="clientLogin">${state.dataMode === "supabase" ? "Client portal" : "Client portal preview"}</button>
           <button class="home-tour-link" type="button" data-action="startWalkthrough">Take a guided tour</button>
           <button class="home-tour-link" type="button" data-action="startDemo">Explore the demo</button>
@@ -578,6 +584,26 @@ function renderHome() {
 }
 
 function renderLogin() {
+  return `
+    <section class="screen auth-screen">
+      <button class="tiny-btn auth-back" type="button" data-action="home">Back</button>
+      <div class="auth-panel">
+        <img class="auth-logo" src="assets/roadlink-logo.svg" alt="Roadlink Cargo Transport Service">
+        <div><p class="eyebrow">Roadlink demo</p><h1>Choose your access</h1><p>Sample records only. No password needed.</p></div>
+        <form class="login-form" id="demoAccessForm">
+          <div class="field"><label for="loginRole">Role</label><select id="loginRole" name="role">
+            ${roles.map((role) => `<option value="${role.id}" ${state.role === role.id ? "selected" : ""}>${role.label}</option>`).join("")}
+            <option value="client">Client</option>
+          </select></div>
+          <button class="primary wide" type="submit">Enter demo</button>
+        </form>
+        <button class="ghost wide" type="button" data-action="startWalkthrough">Take a guided tour</button>
+        <button class="account-signin-link" type="button" data-action="liveLogin">Sign in to a real staff account</button>
+      </div>
+    </section>`;
+}
+
+function renderStaffAccountLogin() {
   const remembered = rememberedLogin();
   const selectedRole = remembered.role || "coordinator";
 
@@ -672,6 +698,14 @@ function renderForgotPassword() {
 }
 
 function renderClientLogin() {
+  return `<section class="screen auth-screen"><button class="tiny-btn auth-back" type="button" data-action="home">Back</button>
+    <div class="auth-panel"><img class="auth-logo" src="assets/roadlink-logo.svg" alt="Roadlink Cargo Transport Service">
+    <div><p class="eyebrow">Client demo</p><h1>Your bookings</h1><p>Sample records only. No password needed.</p></div>
+    <button class="primary wide" type="button" data-action="startClientDemo">Enter client demo</button>
+    <button class="account-signin-link" type="button" data-action="liveClientLogin">Sign in to a real client account</button></div></section>`;
+}
+
+function renderClientAccountLogin() {
   const client = clientDemoUsers[0];
   const production = state.dataMode === "supabase";
   return `
@@ -942,7 +976,7 @@ function renderDashboard() {
 
   const riskCount = state.trips.filter((trip) => trip.status === "needs").length;
   const canManageUsers = state.role === "owner" || state.role === "admin";
-  const canCreateTrip = state.role === "coordinator" || state.role === "owner" || state.role === "admin";
+  const canCreateTrip = state.role === "coordinator";
 
   return `
     <section class="screen">
@@ -979,7 +1013,7 @@ function renderDashboard() {
           <div class="metric"><b>${riskCount}</b><span>At risk</span></div>
         </div>
 
-        ${state.bookingRequests.length ? `
+        ${["coordinator", "owner"].includes(state.role) && state.bookingRequests.some((item) => item.status !== "Converted to trip") ? `
           <article class="card booking-requests-section">
             <div class="section-head">
               <div>
@@ -989,7 +1023,7 @@ function renderDashboard() {
               <span class="pill">${state.bookingRequests.length} open</span>
             </div>
             <div class="request-list">
-              ${state.bookingRequests.slice(0, 2).map((request) => `
+              ${state.bookingRequests.filter((item) => item.status !== "Converted to trip").slice(0, 2).map((request) => `
                 <button class="request-card" type="button" data-open-booking-request="${request.id}">
                   <strong>${request.company}</strong>
                   <span>${request.origin} to ${request.destination}</span>
@@ -1016,6 +1050,67 @@ function renderDashboard() {
       ${state.toast ? `<div class="toast">${state.toast}</div>` : ""}
     </section>
   `;
+}
+
+function roleHomeScreen() {
+  return state.clientSession && !state.session ? "clientPortal" : state.role === "admin" ? "users" : "tasks";
+}
+
+function activeTrip(trip) {
+  return !["cancelled", "needs", "reconciled"].includes(trip.status);
+}
+
+function roleWorkItems() {
+  const items = [];
+  const add = (trip, title, action, label) => items.push({ trip, title, action, label });
+  for (const trip of state.trips) {
+    if (state.role === "coordinator" && trip.coordinator === state.session?.profile?.name && activeTrip(trip)) {
+      if (trip.waybill.status === "Draft") add(trip, "Prepare waybill", "waybill", "Prepare waybill");
+      else if (trip.status === "pending") add(trip, "Waiting for client confirmation", "detail", "Follow up");
+    }
+    if (state.role === "owner") {
+      if (activeTrip(trip) && trip.waybill.status === "Submitted") add(trip, "Awaiting your approval", "waybill", "Review waybill");
+      if (trip.status === "needs") add(trip, "Cancelled with released funds", "detail", "Review trip");
+    }
+    if (state.role === "accounting") {
+      if (trip.status === "needs") add(trip, "For immediate checking", "openReconcile", "Check releases");
+      else if (activeTrip(trip) && trip.waybill.status === "Manager Signed") add(trip, "Awaiting finance approval", "waybill", "Review waybill");
+      else if (trip.status === "confirmed" && trip.waybill.status === "Approved") add(trip, "Ready for disbursement", "budget", "Record disbursement");
+    }
+  }
+  return items.sort((a, b) => Number(b.trip.status === "needs") - Number(a.trip.status === "needs"));
+}
+
+function renderWorkRows(items) {
+  return `<div class="work-list">${items.map(({ trip, title, action, label }) => `
+    <article class="work-row"><div><span class="work-reason">${escapeUiText(title)}</span>
+      <h3>${escapeUiText(trip.route)}</h3><p>${escapeUiText(trip.client)} · ${displayDate(trip.date)}</p>
+      <small>${escapeUiText(trip.id)} · Waybill ${escapeUiText(trip.waybill.number)}</small></div>
+      <button class="secondary" type="button" data-action="${action}" data-trip-action="${trip.id}">${label}</button>
+    </article>`).join("") || `<p class="work-empty">Nothing waiting for you here.</p>`}</div>`;
+}
+
+function renderTaskHome() {
+  const items = roleWorkItems();
+  const requests = state.role === "coordinator" ? state.bookingRequests.filter((item) => item.status !== "Converted to trip") : [];
+  const approvals = state.role === "owner" ? state.approvalRequests.filter((item) => item.status === "Pending").length : 0;
+  return `<section class="screen">${topbar(state.role === "owner" ? "Manager overview" : "My tasks")}
+    <div class="content"><div class="section-head"><div><h3>${escapeUiText(state.session?.profile?.name || roleLabel())}</h3>
+    <p>${roleLabel()}</p></div>${state.role === "coordinator" ? `<button class="primary" type="button" data-action="newTrip">New booking</button>` : ""}</div>
+    <div class="work-summary"><strong>${items.length + requests.length + approvals}</strong><span>items need your attention</span></div>
+    ${items.length || (!requests.length && !approvals) ? renderWorkRows(items) : ""}
+    ${requests.length ? `<section class="work-section"><h3>Client booking requests</h3><div class="request-list">${requests.map((request) => `
+      <button class="request-card" type="button" data-open-booking-request="${request.id}"><strong>${escapeUiText(request.company)}</strong>
+      <span>${escapeUiText(request.origin)} to ${escapeUiText(request.destination)}</span><small>${displayDate(request.date)}</small></button>`).join("")}</div></section>` : ""}
+    ${approvals ? `<button class="secondary" type="button" data-action="users">${approvals} account ${approvals === 1 ? "request" : "requests"} awaiting review</button>` : ""}
+    </div>${state.toast ? `<div class="toast">${state.toast}</div>` : ""}</section>`;
+}
+
+function renderDisbursements() {
+  const items = state.trips.filter((trip) => ["confirmed", "funds"].includes(trip.status) && trip.waybill.status === "Approved")
+    .map((trip) => ({ trip, title: totalBudget(trip) ? `Released so far: ${money(totalBudget(trip))}` : "Approved and ready for release", action: "budget", label: "Record disbursement" }));
+  return `<section class="screen">${topbar("Disbursements")}<div class="content">${renderWorkRows(items)}</div>
+    ${state.toast ? `<div class="toast">${state.toast}</div>` : ""}</section>`;
 }
 
 function roleLabel() {
@@ -1151,9 +1246,9 @@ function renderNewTrip() {
 function renderDetail() {
   const trip = selectedTrip();
   const followUp = trip.preferredChannel.startsWith("Email + ") ? trip.preferredChannel.replace("Email + ", "") : "None";
-  const canReleaseFunds = state.role === "accounting" || state.role === "admin";
+  const canReleaseFunds = state.role === "accounting";
   const releaseReady = ["confirmed", "funds"].includes(trip.status) && trip.waybill.status === "Approved";
-  const canReconcile = state.role === "accounting" || state.role === "admin";
+  const canReconcile = state.role === "accounting";
   return `
     <section class="screen">
       ${topbar("Trip Detail", `<button class="tiny-btn" type="button" data-action="audit">Audit</button>`)}
@@ -1279,19 +1374,28 @@ function renderBudget() {
 }
 
 function renderWaybillQueue() {
-  const trips = [...state.trips].sort((left, right) => {
+  const requiredStatus = state.screen === "managerApprovals" ? "Submitted" : state.screen === "financeApprovals" ? "Manager Signed" : null;
+  const trips = state.trips.filter((trip) => !requiredStatus || (activeTrip(trip) && trip.waybill.status === requiredStatus)).sort((left, right) => {
     const priority = { Submitted: 0, "Manager Signed": 1, Draft: 2, Approved: 3 };
     return (priority[left.waybill.status] ?? 4) - (priority[right.waybill.status] ?? 4);
   });
-  return `<section class="screen">${topbar("Waybills")}<div class="content"><div class="section-head"><div><h3>Waybill approvals</h3><p>Submitted waybills go to the manager, then finance.</p></div></div><div class="cards">${trips.map((trip) => `<article class="card"><div class="section-head"><div><h3>WB ${trip.waybill.number} · ${trip.route}</h3><p>${trip.client} · ${displayDate(trip.date)}</p></div><span class="status-pill ${trip.waybill.status === "Approved" ? "confirmed" : "pending"}">${trip.waybill.status}</span></div><div class="trip-fields"><span><b>Prepared by</b>${trip.waybill.preparedBy}</span><span><b>Manager</b>${trip.waybill.approvedBy || "Pending"}</span><span><b>Finance</b>${trip.waybill.financeBy || "Pending"}</span><span><b>Plate</b>${trip.waybill.plateNo || "For assignment"}</span></div><button class="secondary" type="button" data-action="waybill" data-trip-action="${trip.id}">Open waybill</button></article>`).join("") || `<p>No waybills yet.</p>`}</div></div></section>`;
+  const title = state.screen === "managerApprovals" ? "Pending approvals" : state.screen === "financeApprovals" ? "Finance approvals" : "Waybills";
+  return `<section class="screen">${topbar(title)}<div class="content">
+    ${renderWorkRows(trips.map((trip) => ({ trip, title: trip.waybill.status, action: "waybill", label: "Open waybill" })))}
+    </div></section>`;
 }
 
 function renderWaybill() {
   const trip = selectedTrip();
   const waybill = trip.waybill;
-  const canManagerApprove = state.role === "owner" || state.role === "admin";
-  const canFinanceApprove = state.role === "accounting" || state.role === "admin";
-  const canPrepare = (state.role === "coordinator" || state.role === "owner" || state.role === "admin") && !["Manager Signed", "Approved"].includes(waybill.status);
+  const canManagerApprove = state.role === "owner" && activeTrip(trip) && waybill.status === "Submitted";
+  const canFinanceApprove = state.role === "accounting" && activeTrip(trip) && waybill.status === "Manager Signed";
+  const canPrepare = state.role === "coordinator" && activeTrip(trip) && ["Draft", "Submitted"].includes(waybill.status);
+  const nextStep = !activeTrip(trip) ? "This trip is closed for approvals."
+    : waybill.status === "Draft" ? "Coordinator: prepare and submit the waybill."
+    : waybill.status === "Submitted" ? "Waiting for manager approval."
+    : waybill.status === "Manager Signed" ? "Waiting for accounting approval."
+    : "Approved. Accounting can record disbursements after client confirmation.";
   const paymentRows = [
     ["SELL RATE", "sellRate", waybill.sellRate],
     ["FREIGHT", "freight", waybill.freight],
@@ -1313,8 +1417,8 @@ function renderWaybill() {
       ${topbar("Waybill", `<button class="tiny-btn" type="button" data-action="printWaybill">Print</button>`)}
       <div class="content waybill-screen">
         <article class="card no-print">
-          <strong>Approval routing</strong>
-          <span>Manager approves in-app. Email is only a backup notice to ${state.testEmails.join(" and ")}.</span>
+          <strong>${nextStep}</strong>
+          <div class="approval-status"><span>Manager: ${waybill.approvedBy || "Pending"}</span><span>Accounting: ${waybill.financeBy || "Pending"}</span></div>
           <div class="actions">
             ${canPrepare ? `<button class="secondary" type="button" data-action="submitWaybill">Save and submit</button>` : ""}
             ${canManagerApprove ? `<button class="ghost" type="button" data-action="managerSign">Approve (Manager)</button>` : ""}
@@ -1322,7 +1426,6 @@ function renderWaybill() {
             <button class="primary" type="button" data-action="printWaybill">Print waybill</button>
             <button class="secondary" type="button" data-action="emailWaybill">Email waybill</button>
           </div>
-          ${!canManagerApprove && !canFinanceApprove ? `<span class="field-hint">You can prepare and submit the waybill. Approval buttons appear only for manager, finance, or admin roles.</span>` : ""}
         </article>
 
         <div class="waybill-scroll-hint no-print">Scroll sideways and down to inspect the full printable waybill.</div>
@@ -1449,7 +1552,7 @@ function renderClientPreview() {
 function renderReconcile() {
   const trip = selectedTrip();
   const queue = state.trips.filter((item) => item.status === "needs");
-  const active = trip.status === "needs" ? trip : queue[0];
+  const active = trip?.status === "needs" ? trip : queue[0];
 
   if (!active) {
     return `
@@ -1505,7 +1608,7 @@ function renderReconcile() {
           </div>
         </div>
 
-        <button class="primary wide" type="submit">Mark checking complete</button>
+        ${state.role === "accounting" ? `<button class="primary wide" type="submit">Mark checking complete</button>` : `<p class="field-hint">Accounting records the outcome of each release. This view is read-only.</p>`}
       </form>
       ${state.toast ? `<div class="toast">${state.toast}</div>` : ""}
     </section>
@@ -1653,6 +1756,13 @@ function renderUsers() {
 function bindScreenEvents() {
   if (window.roadlinkWalkthrough?.active) return;
   if (window.roadlinkDemoChat?.active) { window.roadlinkDemoChat.bind(); return; }
+  document.querySelector("#demoAccessForm")?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    window.roadlinkWorkspace.startDemo(new FormData(event.currentTarget).get("role"));
+  });
+  if (state.screen === "reconcile" && state.role !== "accounting") {
+    document.querySelectorAll("#reconcileForm input, #reconcileForm select, #reconcileForm textarea").forEach((control) => { control.disabled = true; });
+  }
   const waybillForm = document.querySelector("#waybillForm[data-readonly='true']");
   if (waybillForm) {
     waybillForm.querySelectorAll("input, textarea, select").forEach((control) => { control.disabled = true; });
@@ -1661,8 +1771,8 @@ function bindScreenEvents() {
   document.querySelectorAll("[data-role]").forEach((button) => {
     button.addEventListener("click", () => {
       state.role = button.dataset.role;
-      state.screen = "dashboard";
-      setToast(`Signed in as ${roleLabel()}`);
+  state.screen = roleHomeScreen();
+  setToast(`Signed in as ${roleLabel()}`);
     });
   });
 
@@ -1844,11 +1954,14 @@ function handleAction(action) {
   const previous = state.screen;
   const routes = {
     startWalkthrough: () => { if (["home", "login"].includes(state.screen)) window.roadlinkWorkspace?.startDemo(); window.roadlinkWalkthrough?.start(); },
-    startDemo: () => window.roadlinkWorkspace?.startDemo(),
+    startDemo: () => navigate("login"),
+    startClientDemo: () => window.roadlinkWorkspace?.startDemo("client"),
+    liveLogin: () => openAccountLogin("liveLogin"),
+    liveClientLogin: () => openAccountLogin("liveClientLogin"),
     chatStaff: () => window.roadlinkDemoChat?.start(trip),
     chatClient: () => window.roadlinkDemoChat?.start(trip),
     back: () => {
-      state.screen = previous === "client" ? "detail" : (previous === "login" || previous === "accountRequest" ? "home" : "dashboard");
+      state.screen = previous === "client" ? "detail" : (["login", "liveLogin", "clientLogin", "liveClientLogin", "accountRequest"].includes(previous) ? "home" : roleHomeScreen());
       render();
     },
     home: () => navigate("home"),
@@ -1862,7 +1975,7 @@ function handleAction(action) {
     newTrip: () => navigate("newTrip"),
     budget: () => navigate("budget", trip.id),
     clientPreview: () => openClientPreview(trip.id),
-    openReconcile: () => navigate("reconcile", trip?.id),
+    openReconcile: () => navigate("reconcile", trip?.status === "needs" ? trip.id : state.trips.find((item) => item.status === "needs")?.id),
     audit: () => navigate("audit", trip.id),
     waybill: () => navigate("waybill", trip.id),
     users: () => navigate("users"),
@@ -1904,8 +2017,14 @@ async function loginStaff(event) {
   } else {
     clearRememberedLogin();
   }
-  state.screen = "dashboard";
+  state.screen = roleHomeScreen();
   setToast(`Signed in as ${role.label}`);
+}
+
+async function openAccountLogin(screen) {
+  if (window.roadlinkWorkspace?.demoActive) window.roadlinkWorkspace.closeDemo();
+  await loadServerState();
+  navigate(screen);
 }
 
 async function logoutCurrentUser() {
@@ -2357,7 +2476,7 @@ async function saveReconciliation(event) {
   }
 
   state.filter = "reconciled";
-  state.screen = "dashboard";
+  state.screen = roleHomeScreen();
   setToast("Trip moved to Cancelled - Reconciled");
 }
 
@@ -2507,9 +2626,14 @@ async function initApp() {
   const launchParams = new URLSearchParams(window.location.search);
   if (launchParams.get("mobile") === "1") document.body.classList.add("mobile-preview");
   if (launchParams.has("demo")) {
+    if (launchParams.get("demo") === "choose") { navigate("login"); return; }
     window.roadlinkWorkspace.startDemo(launchParams.get("demo"));
     if (launchParams.has("walkthrough")) window.roadlinkWalkthrough.start();
     else if (launchParams.has("chat-demo")) window.roadlinkDemoChat.start();
+    return;
+  }
+  if (!storedSession()?.profile && !launchParams.has("trip") && !launchParams.has("walkthrough") && !launchParams.has("chat-demo")) {
+    render();
     return;
   }
   await loadServerState();
@@ -2528,7 +2652,7 @@ async function initApp() {
     } else if (state.clientSession) {
       state.screen = "clientPortal";
     } else if (state.role) {
-      state.screen = "dashboard";
+      state.screen = roleHomeScreen();
     }
   }
 

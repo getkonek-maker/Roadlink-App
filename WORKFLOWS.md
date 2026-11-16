@@ -14,6 +14,10 @@ headers reopens it. GPS tracking and invoices remain future work.
 
 ## Demo On A Laptop Or Phone
 
+Open `/?demo=choose`, choose a role, and press Enter demo. No username or
+password is needed for sample records. The real account sign-in links still
+require credentials. The same chooser is available from the home page.
+
 Open `https://roadlink-trip-control.netlify.app/?demo=1` for the full desktop
 workspace. Use the Preview role selector to change staff roles and follow the same trip
 through each approval. Phone view narrows the layout for laptop presentations;
@@ -25,6 +29,13 @@ to confirm it, then submit the waybill. Switch to Owner / Manager and approve,
 then Accounting for finance approval and release logging. A funded cancellation
 opens checking. Record the release outcomes, then complete reconciliation.
 All these actions remain in the browser demo and send no real emails.
+
+Each role opens its own tasks first. Managers review Submitted waybills under
+Pending approvals. Accounting reviews Manager Signed waybills under Finance
+approvals, then records releases under Disbursements. Cancellation checking is
+editable only by accounting. Admin manages access but cannot approve waybills,
+release funds, or complete reconciliation. Completed approval buttons disappear.
+On a phone, the role navigation is at the bottom; More contains other destinations.
 
 ## Trip Messages Preview
 

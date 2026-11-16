@@ -39,10 +39,30 @@ and exiting restores the original screen, records, role, and session.
 
 ## Web And Phone Demo
 
+- Password-free role chooser: `https://roadlink-trip-control.netlify.app/?demo=choose`
 - Web workspace: `https://roadlink-trip-control.netlify.app/?demo=1`
 - In-app guided tour: `https://roadlink-trip-control.netlify.app/?demo=1&walkthrough=2`
 - Client demo: `https://roadlink-trip-control.netlify.app/?demo=client`
 - Phone layout on a laptop: add `&mobile=1`; actual phones adapt automatically.
+
+The demo entry lets visitors select Coordinator, Manager, Accounting, Admin,
+or Client without credentials. This opens isolated sample data, not a real
+account. Real staff/client account sign-in remains available separately and
+still requires credentials. Anonymous demo entry does not call the backend.
+
+Each role has its own landing page and navigation on desktop and phone:
+- Coordinator: assigned booking tasks, trips, new booking, waybills, messages.
+- Manager: overview, pending approvals, trips, cancellation alerts, audit,
+  messages, and account approvals.
+- Accounting: tasks, finance approvals, disbursements, cancellation checking,
+  trips, and messages.
+- Admin: users and access, trip records, and audit; no automatic financial powers.
+- Client: own bookings, booking requests, and messages.
+
+Approval buttons appear only at the correct stage for the responsible role:
+Submitted for manager, Manager Signed for accounting. Completed approvals
+remain visible as status, not buttons. Server routes enforce these same roles,
+including dynamic endpoints. Manager cancellation checking is read-only.
 
 The desktop workspace has a sidebar, trip table, waybill approval queue, and
 two-column booking form. Phones show the compact trip list and single-column

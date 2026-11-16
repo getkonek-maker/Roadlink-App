@@ -22,7 +22,14 @@
 - Public hands-on chat preview: `https://roadlink-app.onrender.com/?chat-demo=1`
 - Both routes work without creating a staff/client account. They use isolated
   sample data and preserve any signed-in session on exit.
-- Asset/cache release marker: `web-app-v13`; PWA cache version 13.
+- Asset/cache release marker: `web-app-v14`; PWA cache version 14.
+- Password-free demo entry: `https://roadlink-trip-control.netlify.app/?demo=choose`.
+- Latest role-workload update: role-specific home screens and navigation,
+  stage-specific approval buttons, manager read-only cancellation checking,
+  and backend rejection of admin financial actions. Ten automated tests plus
+  browser checks cover demo entry, roles, approvals, and phone navigation.
+  Real login was not bypassed. Deploy the backend commit on Render as well as
+  the frontend on Netlify so server authorization changes are active.
 - Client demo: `https://roadlink-trip-control.netlify.app/?demo=client`.
 - November 16 update: 15 short in-app tour steps; separate staff/client demo
   entrances; chat sender follows the current account. Nine automated tests and

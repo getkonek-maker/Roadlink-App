@@ -1,14 +1,14 @@
-const CACHE_NAME = "roadlink-trip-control-v13";
+const CACHE_NAME = "roadlink-trip-control-v14";
 
 const STATIC_ASSETS = [
   "./",
   "./index.html",
-  "./styles.css?v=13",
-  "./workspace.css?v=13",
-  "./app.js?v=13",
-  "./workspace.js?v=13",
-  "./walkthrough.js?v=13",
-  "./demo-chat.js?v=13",
+  "./styles.css?v=14",
+  "./workspace.css?v=14",
+  "./app.js?v=14",
+  "./workspace.js?v=14",
+  "./walkthrough.js?v=14",
+  "./demo-chat.js?v=14",
   "./manifest.webmanifest",
   "./assets/roadlink-logo.svg",
   "./assets/roadlink-logo-home.svg",

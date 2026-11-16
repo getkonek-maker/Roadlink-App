@@ -96,6 +96,22 @@ test("privileged routes reject unauthenticated requests", async () => {
   }
 });
 
+test("financial actions require the assigned business role, not admin access", async () => {
+  const admin = await login("admin", "admin.temp", "Roadlink-0047");
+  const coordinator = await login("coordinator", "mika.temp", "Roadlink-8421");
+  const owner = await login("owner", "owner.temp", "Roadlink-6714");
+  const accounting = await login("accounting", "finance.temp", "Roadlink-2198");
+  for (const cookie of [admin, coordinator]) {
+    for (const path of ["/api/waybills/approve-manager", "/api/waybills/approve-finance", "/api/budget-items", "/api/reconciliation/update",
+      "/api/waybills/TEST/approve-manager", "/api/waybills/TEST/approve-finance", "/api/reconciliation/TEST/update"]) {
+      const result = await request(path, { method: "POST", cookie, body: { tripId: "TEST" } });
+      assert.equal(result.response.status, 403, path);
+    }
+  }
+  assert.equal((await request("/api/waybills/approve-finance", { method: "POST", cookie: owner, body: { tripId: "TEST" } })).response.status, 403);
+  assert.equal((await request("/api/waybills/approve-manager", { method: "POST", cookie: accounting, body: { tripId: "TEST" } })).response.status, 403);
+});
+
 test("Google Sheets mirror payload excludes client-link secrets", async () => {
   let received;
   const webhook = createHttpServer((req, res) => {

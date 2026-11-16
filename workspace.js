@@ -3,7 +3,7 @@
   let demoActive = false;
   let snapshot;
   let demoRole = "coordinator";
-  const authScreens = new Set(["home", "login", "clientLogin", "accountRequest", "forgotPassword"]);
+  const authScreens = new Set(["home", "login", "liveLogin", "liveClientLogin", "clientLogin", "accountRequest", "forgotPassword"]);
 
   function setRole(role) {
     demoRole = role;
@@ -14,7 +14,14 @@
   }
 
   function startDemo(initialRole = "coordinator") {
-    if (demoActive) return;
+    const role = initialRole === "client" || roles.some((item) => item.id === initialRole) ? initialRole : "coordinator";
+    if (demoActive) {
+      setRole(role);
+      state.screen = roleHomeScreen();
+      state.filter = "all";
+      const url = new URL(location.href); url.searchParams.set("demo", role); history.replaceState(null, "", url);
+      render(); return;
+    }
     snapshot = structuredClone(state);
     demoActive = true;
     Object.assign(state, structuredClone(seed), { dataMode: "presentation-demo", toast: "", filter: "all" });
@@ -28,14 +35,24 @@
     Object.assign(awaiting.waybill, { number: "037959", approvedBy: "", financeBy: "", status: "Submitted" });
     awaiting.timeline = [eventLine("Mika Santos submitted the waybill for manager approval")];
     state.trips.push(awaiting);
+    const financeReview = structuredClone(awaiting);
+    Object.assign(financeReview, { id: "RL-2414", route: "Cebu to Dumaguete", destination: "Dumaguete City, Negros Oriental" });
+    Object.assign(financeReview.waybill, { number: "037960", approvedBy: "Emmanuel Garces", status: "Manager Signed" });
+    financeReview.timeline.push(eventLine("Emmanuel Garces approved the waybill; accounting notified"));
+    state.trips.push(financeReview);
+    const ready = structuredClone(financeReview);
+    Object.assign(ready, { id: "RL-2415", route: "Cebu to Bacolod", destination: "Bacolod City, Negros Occidental" });
+    Object.assign(ready.waybill, { number: "037961", financeBy: "Liza Mercado", status: "Approved" });
+    ready.timeline.push(eventLine("Liza Mercado approved finance; ready to record disbursements"));
+    state.trips.push(ready);
     const checking = structuredClone(state.trips[0]);
     Object.assign(checking, { id: "RL-2413", route: "Cebu to Iloilo", destination: "Iloilo City, Iloilo", status: "needs", cancelledReason: "Client postponed the shipment." });
     checking.timeline.push(eventLine("Client cancelled after funds were released; accounting notified"));
     state.trips.push(checking);
     state.bookingRequests[0].date = state.trips[0].date;
-    setRole(initialRole === "client" ? "client" : "coordinator");
-    state.screen = demoRole === "client" ? "clientPortal" : "dashboard";
-    const url = new URL(location.href); url.searchParams.set("demo", demoRole === "client" ? "client" : "1"); history.replaceState(null, "", url);
+    setRole(role);
+    state.screen = roleHomeScreen();
+    const url = new URL(location.href); url.searchParams.set("demo", role); history.replaceState(null, "", url);
     render();
   }
 
@@ -49,37 +66,54 @@
     render();
   }
 
+  function navigationItems() {
+    const count = (status) => state.trips.filter((trip) => activeTrip(trip) && trip.waybill.status === status).length;
+    const checks = state.trips.filter((trip) => trip.status === "needs").length;
+    if (state.clientSession && !state.session) return [["clientPortal", "My bookings"], ["clientBooking", "Request booking"], ["chatClient", "Messages"]];
+    if (state.role === "owner") return [["tasks", "Overview", roleWorkItems().length + state.approvalRequests.filter((item) => item.status === "Pending").length], ["managerApprovals", "Pending approvals", count("Submitted")], ["dashboard", "Trips"], ["reconcile", "Cancellation alerts", checks], ["audit", "Audit history"], ["chatStaff", "Messages"], ["users", "Account approvals", state.approvalRequests.filter((item) => item.status === "Pending").length]];
+    if (state.role === "accounting") return [["tasks", "My tasks", roleWorkItems().length], ["financeApprovals", "Finance approvals", count("Manager Signed")], ["disbursements", "Disbursements"], ["reconcile", "Cancellation checking", checks], ["dashboard", "Trips"], ["chatStaff", "Messages"]];
+    if (state.role === "admin") return [["users", "Users & access"], ["dashboard", "Trip records"], ["audit", "Audit history"]];
+    return [["tasks", "My tasks", roleWorkItems().length], ["dashboard", "Trips"], ["newTrip", "New booking"], ["waybills", "Waybills"], ["chatStaff", "Messages"]];
+  }
+
   function renderChrome() {
     const workspace = !authScreens.has(state.screen);
     const shell = document.querySelector(".workspace-shell");
     shell.classList.toggle("is-workspace", workspace);
     const nav = document.querySelector("#workspaceNav");
     const client = Boolean(state.clientSession) && !state.session;
-    const items = client ? [["clientPortal", "My bookings"], ["clientBooking", "Request booking"], ["chatClient", "Messages"]]
-      : [["dashboard", "Trips"], ...(["coordinator", "owner", "admin"].includes(state.role) ? [["newTrip", "New trip"]] : []), ["waybills", "Waybills"], ["openReconcile", "Immediate checking"], ["chatStaff", "Messages"], ["audit", "Audit timeline"], ...(["owner", "admin"].includes(state.role) ? [["users", "Users & access"]] : [])];
-    nav.innerHTML = `<div class="workspace-brand"><img src="assets/roadlink-logo.svg" alt="Roadlink Cargo Transport Service"><span>Trip Control</span></div><nav>${items.map(([screen, label]) => `<button type="button" data-workspace-nav="${screen}" class="${state.screen === screen || (screen === "openReconcile" && state.screen === "reconcile") ? "is-current" : ""}">${label}${screen === "openReconcile" && state.trips.some((trip) => trip.status === "needs") ? `<b>${state.trips.filter((trip) => trip.status === "needs").length}</b>` : ""}</button>`).join("")}</nav><div class="workspace-nav-footer"><button type="button" data-workspace-tour>Guided tour</button><button type="button" data-workspace-phone>${document.body.classList.contains("mobile-preview") ? "Desktop view" : "Phone view"}</button><div class="workspace-person"><span class="workspace-avatar">${client ? "AL" : initials(state.session?.profile?.name || "Roadlink")}</span><div><strong>${escapeUiText(client ? state.clientSession.contact || state.clientSession.name : state.session?.profile?.name || "Roadlink staff")}</strong><small>${client ? "Client" : roleLabel()}</small></div></div></div>`;
-    const toolbar = document.querySelector("#demoToolbar");
-    toolbar.hidden = !demoActive || window.roadlinkWalkthrough?.active || window.roadlinkDemoChat?.active;
-    const otherDemoUrl = `?demo=${client ? "1" : "client"}${document.body.classList.contains("mobile-preview") ? "&mobile=1" : ""}`;
-    toolbar.innerHTML = demoActive ? `<span class="workspace-demo-label">${client ? "Client demo" : "Staff demo"}</span>${client ? `<span>Ana Lim</span>` : `<label for="demoRole">Preview role</label><select id="demoRole">${roles.map((role) => `<option value="${role.id}" ${demoRole === role.id ? "selected" : ""}>${role.label}</option>`).join("")}</select>`}<a class="workspace-demo-link" href="${otherDemoUrl}" target="_blank" rel="noopener">${client ? "Open staff demo" : "Open client demo"}</a><button type="button" data-workspace-phone>${document.body.classList.contains("mobile-preview") ? "Desktop view" : "Phone view"}</button><button type="button" data-workspace-exit>Exit demo</button>` : "";
+    const items = navigationItems();
+    const navButton = ([screen, label, count]) => `<button type="button" data-workspace-nav="${screen}" class="${state.screen === screen ? "is-current" : ""}"><span>${label}</span>${count ? `<b>${count}</b>` : ""}</button>`;
+    nav.innerHTML = `<div class="workspace-brand"><img src="assets/roadlink-logo.svg" alt="Roadlink Cargo Transport Service"><span>Trip Control</span></div><nav>${items.map(navButton).join("")}</nav><div class="workspace-nav-footer"><button type="button" data-workspace-tour>Guided tour</button><button type="button" data-workspace-phone>${document.body.classList.contains("mobile-preview") ? "Desktop view" : "Phone view"}</button><div class="workspace-person"><span class="workspace-avatar">${client ? "AL" : initials(state.session?.profile?.name || "Roadlink")}</span><div><strong>${escapeUiText(client ? state.clientSession.contact || state.clientSession.name : state.session?.profile?.name || "Roadlink staff")}</strong><small>${client ? "Client" : roleLabel()}</small></div></div></div>`;
     const locked = Boolean(window.roadlinkWalkthrough?.active || window.roadlinkDemoChat?.active);
+    let mobileNav = document.querySelector("#mobileNav");
+    if (!mobileNav) { mobileNav = document.createElement("nav"); mobileNav.id = "mobileNav"; mobileNav.className = "workspace-mobile-nav"; mobileNav.setAttribute("aria-label", "Role navigation"); document.querySelector("#phoneFrame").append(mobileNav); }
+    mobileNav.hidden = !workspace || locked;
+    mobileNav.innerHTML = `${items.slice(0, 3).map(navButton).join("")}<details class="mobile-more"><summary>More</summary><div>${items.slice(3).map(navButton).join("")}<button type="button" data-workspace-tour>Guided tour</button>${demoActive ? `<button type="button" data-workspace-access>Choose demo access</button>` : `<button type="button" data-workspace-logout>Sign out</button>`}</div></details>`;
+    const toolbar = document.querySelector("#demoToolbar");
+    toolbar.hidden = !demoActive || locked;
+    const otherDemoUrl = `?demo=${client ? "choose" : "client"}${document.body.classList.contains("mobile-preview") ? "&mobile=1" : ""}`;
+    toolbar.innerHTML = demoActive ? `<span class="workspace-demo-label">${client ? "Client demo" : "Staff demo"}</span>${client ? `<span>Ana Lim</span>` : `<label for="demoRole">Preview role</label><select id="demoRole">${roles.map((role) => `<option value="${role.id}" ${demoRole === role.id ? "selected" : ""}>${role.label}</option>`).join("")}</select>`}<a class="workspace-demo-link" href="${otherDemoUrl}" target="_blank" rel="noopener">${client ? "Open staff demo" : "Open client demo"}</a><button type="button" data-workspace-phone>${document.body.classList.contains("mobile-preview") ? "Desktop view" : "Phone view"}</button><button type="button" data-workspace-exit>Exit demo</button>` : "";
     nav.inert = locked;
     toolbar.inert = locked;
-    nav.querySelectorAll("[data-workspace-nav]").forEach((button) => button.addEventListener("click", () => {
+    document.querySelectorAll("[data-workspace-nav]").forEach((button) => button.addEventListener("click", () => {
       const screen = button.dataset.workspaceNav;
       if (screen === "audit" && !state.trips.length) { setToast("Open a trip to view its audit history."); return; }
-      if (["chatStaff", "chatClient", "openReconcile"].includes(screen)) handleAction(screen);
-      else navigate(screen === "waybill" && !state.trips.length ? "dashboard" : screen);
+      if (screen === "chatClient") state.selectedTripId = clientTrips()[0]?.id;
+      if (["chatStaff", "chatClient"].includes(screen)) {
+        if (!selectedTrip()) { setToast("Open a booking to start a conversation."); return; }
+        handleAction(screen);
+      } else navigate(screen);
     }));
-    nav.querySelector("[data-workspace-tour]").addEventListener("click", () => window.roadlinkWalkthrough.start());
+    document.querySelectorAll("[data-workspace-tour]").forEach((button) => button.addEventListener("click", () => window.roadlinkWalkthrough.start()));
+    document.querySelector("[data-workspace-access]")?.addEventListener("click", () => navigate("login"));
+    document.querySelector("[data-workspace-logout]")?.addEventListener("click", logoutCurrentUser);
     document.querySelectorAll("[data-workspace-phone]").forEach((button) => button.addEventListener("click", () => {
       const mobile = document.body.classList.toggle("mobile-preview");
       const url = new URL(location.href); if (mobile) url.searchParams.set("mobile", "1"); else url.searchParams.delete("mobile"); history.replaceState(null, "", url);
       renderChrome();
     }));
-    toolbar.querySelector("#demoRole")?.addEventListener("change", (event) => {
-      setRole(event.target.value); state.screen = demoRole === "client" ? "clientPortal" : "dashboard"; state.filter = "all"; render();
-    });
+    toolbar.querySelector("#demoRole")?.addEventListener("change", (event) => startDemo(event.target.value));
     toolbar.querySelector("[data-workspace-exit]")?.addEventListener("click", closeDemo);
   }
 
@@ -105,19 +139,19 @@
     }
     if (path === "/api/waybills/submit" && trip) { Object.assign(trip.waybill, payload.waybill, { status: "Submitted", approvedBy: "", financeBy: "" }); addEvent(trip, "submitted waybill"); return resultTrip(); }
     if (path === "/api/waybills/approve-manager" && trip) {
-      if (!["owner", "admin"].includes(state.role) || trip.waybill.status !== "Submitted") throw new Error("A manager approves after the coordinator submits the waybill.");
+      if (state.role !== "owner" || !activeTrip(trip) || trip.waybill.status !== "Submitted") throw new Error("A manager approves after the coordinator submits the waybill.");
       Object.assign(trip.waybill, { approvedBy: actor, status: "Manager Signed" }); addEvent(trip, "approved waybill as manager"); return resultTrip();
     }
     if (path === "/api/waybills/approve-finance" && trip) {
-      if (!["accounting", "admin"].includes(state.role) || trip.waybill.status !== "Manager Signed") throw new Error("Finance approval follows manager approval.");
+      if (state.role !== "accounting" || !activeTrip(trip) || trip.waybill.status !== "Manager Signed") throw new Error("Finance approval follows manager approval.");
       Object.assign(trip.waybill, { financeBy: actor, status: "Approved" }); addEvent(trip, "approved finance"); return resultTrip();
     }
     if (path === "/api/budget-items" && trip) {
-      if (!["accounting", "admin"].includes(state.role) || trip.waybill.status !== "Approved" || !["confirmed", "funds"].includes(trip.status)) throw new Error("Client confirmation and both approvals are required before release.");
+      if (state.role !== "accounting" || trip.waybill.status !== "Approved" || !["confirmed", "funds"].includes(trip.status)) throw new Error("Client confirmation and both approvals are required before release.");
       trip.budget.push({ type: payload.type, amount: payload.amount, detail: payload.detail, state: "Released" }); trip.status = "funds"; addEvent(trip, `logged ${payload.type} release of ${money(payload.amount)}`); return resultTrip();
     }
     if (path === "/api/reconciliation/update" && trip) {
-      if (!["accounting", "admin"].includes(state.role)) throw new Error("Accounting completes checking.");
+      if (state.role !== "accounting") throw new Error("Accounting completes checking.");
       const unresolved = trip.budget.some((item) => item.type === "Cheque" ? !payload.chequeVoided : item.type === "PO" ? !payload.poCancelled : !payload.cashReturned);
       if (unresolved) throw new Error("Resolve every released item before completing this sample checking task.");
       Object.assign(trip.reconciliation, payload); trip.status = "reconciled"; addEvent(trip, "completed reconciliation"); return resultTrip();

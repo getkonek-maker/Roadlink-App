@@ -1567,11 +1567,11 @@ async function handleRequest(request, response) {
       "/api/trips": guard(["coordinator", "owner", "admin"], (actor) => handleCreateTrip(payload, request, actor)),
       "/api/demo/client-link": guard(staffRoles, (actor) => handleDemoClientLink(payload, actor)),
       "/api/client-action": () => handleClientAction(payload),
-      "/api/budget-items": guard(["accounting", "admin"], (actor) => handleBudget(payload, actor)),
+      "/api/budget-items": guard(["accounting"], (actor) => handleBudget(payload, actor)),
       "/api/waybills/submit": guard(["coordinator", "owner", "admin"], (actor) => handleWaybillSubmit(payload, actor)),
-      "/api/waybills/approve-manager": guard(["owner", "admin"], (actor) => handleWaybillApproval(payload, "manager", actor)),
-      "/api/waybills/approve-finance": guard(["accounting", "admin"], (actor) => handleWaybillApproval(payload, "finance", actor)),
-      "/api/reconciliation/update": guard(["accounting", "admin"], (actor) => handleReconciliation(payload, actor)),
+      "/api/waybills/approve-manager": guard(["owner"], (actor) => handleWaybillApproval(payload, "manager", actor)),
+      "/api/waybills/approve-finance": guard(["accounting"], (actor) => handleWaybillApproval(payload, "finance", actor)),
+      "/api/reconciliation/update": guard(["accounting"], (actor) => handleReconciliation(payload, actor)),
       "/api/client-portal/booking-request": guard(["client"], (actor) => handleBookingRequest(payload, actor)),
       "/api/sync/google-sheets": guard(["owner", "admin"], () => syncGoogleSheets(payload.kind || "manual", payload.payload || payload)),
       "/api/send-email": guard(staffRoles, async () => {
@@ -1600,9 +1600,9 @@ async function handleRequest(request, response) {
       if (!trip) return { ok: false, status: 404, message: "Trip not found." };
       return sendEmailKind("waybill", trip, request);
     });
-    if (dynamicManager) handler = guard(["owner", "admin"], (actor) => handleWaybillApproval({ ...payload, tripId: dynamicManager[1] }, "manager", actor));
-    if (dynamicFinance) handler = guard(["accounting", "admin"], (actor) => handleWaybillApproval({ ...payload, tripId: dynamicFinance[1] }, "finance", actor));
-    if (dynamicReconcile) handler = guard(["accounting", "admin"], (actor) => handleReconciliation({ ...payload, tripId: dynamicReconcile[1] }, actor));
+    if (dynamicManager) handler = guard(["owner"], (actor) => handleWaybillApproval({ ...payload, tripId: dynamicManager[1] }, "manager", actor));
+    if (dynamicFinance) handler = guard(["accounting"], (actor) => handleWaybillApproval({ ...payload, tripId: dynamicFinance[1] }, "finance", actor));
+    if (dynamicReconcile) handler = guard(["accounting"], (actor) => handleReconciliation({ ...payload, tripId: dynamicReconcile[1] }, actor));
 
     if (!handler) return json(response, 404, { ok: false, message: "API route not found." });
     try {

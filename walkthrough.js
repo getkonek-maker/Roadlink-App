@@ -6,7 +6,7 @@
     },
     {
       screen: "login", target: "#loginRole", title: "Everyone has their own access",
-      body: "Staff sign in with their own account and assigned role. New staff request access first. An owner or admin approves their account."
+      body: "For this demo, choose a role and select Enter demo. No password is needed. Real staff use their own approved accounts."
     },
     {
       screen: "newTrip", fill: "trip", target: "#newTripForm", title: "Create a booking",
