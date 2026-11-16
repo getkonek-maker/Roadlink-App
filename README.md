@@ -27,10 +27,10 @@ This standalone project is separate from DoctorsAssistant. It demonstrates the c
 Choose **Take a guided tour** on the home/login screen or **?** in a screen's
 header. Opening `/?walkthrough=2` starts the tour automatically.
 
-The 28-step walkthrough shows the actual app screens with a sample Cebu-to-Leyte
-trip. It covers staff access, booking, client email confirmation, waybills,
-manager/finance approvals, disbursement logging, both cancellation scenarios,
-reconciliation, audit history, the optional client portal, and trip messages.
+The 15-step quick tour shows the actual app screens with a sample Cebu-to-Leyte
+trip. Each dialog uses a short, plain-language paragraph. It covers booking,
+client confirmation, waybills, approvals, fund releases, cancellation checking,
+audit history, and the client portal with an optional hands-on chat demo.
 Short dialogs appear inside the app beside a highlighted control, with Back,
 Next, and Skip tour. There is no separate instructions panel or phone frame.
 
@@ -41,14 +41,15 @@ and exiting restores the original screen, records, role, and session.
 
 - Web workspace: `https://roadlink-trip-control.netlify.app/?demo=1`
 - In-app guided tour: `https://roadlink-trip-control.netlify.app/?demo=1&walkthrough=2`
+- Client demo: `https://roadlink-trip-control.netlify.app/?demo=client`
 - Phone layout on a laptop: add `&mobile=1`; actual phones adapt automatically.
 
 The desktop workspace has a sidebar, trip table, waybill approval queue, and
 two-column booking form. Phones show the compact trip list and single-column
 forms. Both use the same app, branding, PWA icon, and operating workflows.
 
-The demo workspace lets presenters switch between coordinator, manager,
-accounting, admin, and client. Bookings, approvals, releases, client responses,
+The staff demo lets presenters preview coordinator, manager, accounting, and
+admin roles. The client demo opens separately. Bookings, approvals, releases, client responses,
 and reconciliation operate on isolated sample records in browser memory. No
 database writes or emails are sent. Refresh starts fresh; exiting restores any
 prior session. Demo chat still uses sessionStorage for local conversations.
@@ -59,12 +60,10 @@ public files and assets enter `dist/`. Secrets and backend source are excluded.
 
 ### Trip Chat Demo
 
-Open `/?chat-demo=1` without a login, or choose **Trip messages (Demo)** inside a
-staff trip or client booking. Switch **Roadlink staff** / **Client** to send and
-read both sides of one conversation. The preview includes unread badges, local
-read status, suggested replies, draft preservation while switching views, and
-Reset demo. The walkthrough's Trip messages chapter also opens the interactive
-preview.
+Choose **Trip messages (Demo)** inside a staff trip or client booking.
+The sender is fixed to the current account; there is no staff/client identity
+switch inside chat. Staff and client demos have separate entrances. Suggested
+replies and Reset demo are available. The tour ends with a client demo link.
 
 Demo conversations are isolated per trip in the current browser tab's
 `sessionStorage`. They survive refreshes in that tab; they are not delivered to
@@ -74,7 +73,8 @@ state. No chat API or production messaging is enabled by this demo.
 
 To make chat live later: add a server-backed trip message store with participant
 authorization, server timestamps and read receipts, pagination, and delivery
-notifications. Replace the demo view switch with the signed-in participant.
+notifications. The current sender restriction is a demo UI behavior, not a
+replacement for server-side participant authorization.
 
 ## Run Locally
 

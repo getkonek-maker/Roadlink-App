@@ -1846,7 +1846,7 @@ function handleAction(action) {
     startWalkthrough: () => { if (["home", "login"].includes(state.screen)) window.roadlinkWorkspace?.startDemo(); window.roadlinkWalkthrough?.start(); },
     startDemo: () => window.roadlinkWorkspace?.startDemo(),
     chatStaff: () => window.roadlinkDemoChat?.start(trip),
-    chatClient: () => window.roadlinkDemoChat?.start(trip, "client"),
+    chatClient: () => window.roadlinkDemoChat?.start(trip),
     back: () => {
       state.screen = previous === "client" ? "detail" : (previous === "login" || previous === "accountRequest" ? "home" : "dashboard");
       render();
@@ -2507,7 +2507,7 @@ async function initApp() {
   const launchParams = new URLSearchParams(window.location.search);
   if (launchParams.get("mobile") === "1") document.body.classList.add("mobile-preview");
   if (launchParams.has("demo")) {
-    window.roadlinkWorkspace.startDemo();
+    window.roadlinkWorkspace.startDemo(launchParams.get("demo"));
     if (launchParams.has("walkthrough")) window.roadlinkWalkthrough.start();
     else if (launchParams.has("chat-demo")) window.roadlinkDemoChat.start();
     return;

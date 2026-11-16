@@ -1,175 +1,65 @@
 (() => {
   const steps = [
     {
-      chapter: 0, screen: "dashboard", target: ".status-grid", title: "Welcome to Roadlink Trip Control",
-      body: "Roadlink keeps a booking, its waybill, and its released funds together. We'll follow Mika's Cebu-to-Leyte trip and see what each person does.",
-      action: "Use Next to move through the sample screens. Back lets you revisit anything.",
-      outcome: "By the end, you'll know how to book, approve, release, handle a cancellation, and check the records.", next: "Show me how"
+      screen: "dashboard", target: ".status-grid", title: "Your trips, in one place",
+      body: "Follow one booking from start to finish. This preview shows each person's role using sample records. No real emails are sent."
     },
     {
-      chapter: 0, screen: "login", target: "#loginRole", title: "Each person signs in to their own role",
-      body: "Coordinator: books trips and prepares waybills. Manager: approves the waybill. Accounting: approves finance, records releases, and checks returns. Admin: manages access.",
-      action: "Tap Staff log in, select your assigned role, then enter your email or username and password. Remember login details keeps your username and role handy.",
-      outcome: "You land on your role's dashboard. The tour will switch roles for you so you can see the handoffs."
+      screen: "login", target: "#loginRole", title: "Everyone has their own access",
+      body: "Staff sign in with their own account and assigned role. New staff request access first. An owner or admin approves their account."
     },
     {
-      chapter: 0, screen: "accountRequest", target: "#accountRequestForm", title: "New staff request access first",
-      body: "A new coordinator or accountant starts with Create account request on the login page.",
-      action: "Enter your name, email, company if applicable, and requested role, then submit the request.",
-      outcome: "An owner or admin reviews the request before an account is issued. Requesting a role does not grant access."
+      screen: "newTrip", fill: "trip", target: "#newTripForm", title: "Create a booking",
+      body: "Choose New trip. Add the company, authorized contact, email, route, truck, and date. Then choose Create trip and send confirmation email."
     },
     {
-      chapter: 0, screen: "users", role: "owner", target: ".approval-list", title: "The owner approves staff accounts",
-      body: "The owner opens Users on the dashboard. Pending account requests appear under Account approvals.",
-      action: "Check the person's identity and requested role, then choose Approve or Decline.",
-      outcome: "Approval creates an account and temporary credentials. The user can then sign in and change their password."
+      screen: "client", preview: "email", stage: 1, role: "client", title: "The client receives an email",
+      body: "The client receives the trip details with Confirm, Cancel, and Contact Roadlink options. The email link works without an app or account."
     },
     {
-      chapter: 1, screen: "dashboard", target: "[data-action='newTrip']", title: "The coordinator starts on the dashboard",
-      body: "The dashboard groups trips by status. Waiting client means the client has not confirmed yet. Funds released means accounting has recorded a release.",
-      action: "Tap New trip to start a booking. Later, use the status filters and Open trip to find an existing booking.",
-      outcome: "One trip record will carry the client, route, waybill, releases, and history."
+      screen: "client", stage: 1, role: "client", target: "[data-client-confirm]", title: "The client confirms",
+      body: "The client reviews the details and selects Confirm Booking. Staff then see Confirmed. This does not approve expenses or release money."
     },
     {
-      chapter: 1, screen: "newTrip", target: "#newTripForm .form-card", fill: "trip", title: "Enter the company and authorized contact",
-      body: "For our example, Mika books for Mactan Seafoods Export. Ana Lim is the person authorized to confirm or cancel.",
-      action: "Fill Company, Authorized contact, their email and phone. Email is the main channel; choose WhatsApp or Viber if a follow-up is useful.",
-      outcome: "The confirmation goes to the email entered here. These sample values belong only to this tour."
+      screen: "waybill", stage: 2, target: ".waybill-paper", title: "Prepare the waybill",
+      body: "Trip details are already filled in. Add the driver and proposed costs. These are planned expenses, not money already released."
     },
     {
-      chapter: 1, screen: "newTrip", target: "#newTripForm .form-card:nth-of-type(2)", fill: "trip", title: "Choose the route, truck, and date",
-      body: "Our sample travels from Mandaue City, Cebu to Ormoc City, Leyte in a 10-wheeler, plate GAA 4821.",
-      action: "Enter From and To, select Vehicle type, assign a plate if known, pick a Trip date, and add Cargo notes. Tap Create trip and send confirmation email.",
-      outcome: "A Pending trip is created. Its details carry into the waybill so you don't have to type them again.", next: "See the sample email"
+      screen: "waybill", stage: 3, target: "[data-action='submitWaybill']", title: "Send it for approval",
+      body: "Choose Save and submit. The manager receives an in-app notification. You can also print or email a copy of the waybill."
     },
     {
-      chapter: 1, screen: "client", preview: "email", stage: 1, title: "The client receives a Roadlink email", role: "client",
-      body: "The email identifies the trip, route, date, truck, and contact. The coordinator can resend it from Trip Detail when needed.",
-      action: "The client chooses Confirm booking, Cancel booking, or Contact Roadlink. The secure page asks them to review their choice.",
-      outcome: "The client can respond without installing an app or signing in. This is a sample email preview; the tour sends no email."
+      screen: "waybill", stage: 3, role: "owner", target: "[data-action='managerSign']", title: "The manager approves",
+      body: "The manager reviews the trip and costs, then selects Approve (Manager). Their approval is recorded, and accounting is notified."
     },
     {
-      chapter: 1, screen: "client", stage: 1, role: "client", target: "[data-client-confirm]", title: "The client confirms on the secure page",
-      body: "Ana checks the trip details, then taps Confirm Booking. Opening the email alone does not confirm the trip.",
-      action: "For a real booking, use the secure link in the email. Contact Roadlink records a request for the coordinator to follow up; it does not change the trip status.",
-      outcome: "Confirmation is recorded against this trip. Staff can now see Confirmed.", next: "Show the confirmed trip"
+      screen: "waybill", stage: 4, role: "accounting", target: "[data-action='financeSign']", title: "Accounting approves finance",
+      body: "Accounting reviews the same waybill and selects Approve (Finance). Client confirmation and both approvals are required before a release can be logged."
     },
     {
-      chapter: 1, screen: "detail", stage: 2, target: ".detail-hero", title: "Confirmed does not mean money was released",
-      body: "Mika opens the trip and sees Confirmed. The client has agreed to the booking, but the budget is still zero.",
-      action: "In Trip Detail, open Prepare / open waybill to prepare the proposed trip costs.",
-      outcome: "Client confirmation and waybill approvals are separate steps. Both are required before accounting records a release.",
-      check: { question: "The client confirmed. Can accounting release funds now?", options: ["Yes, confirmation is enough", "Only after manager and finance approval"], correct: 1, explanation: "Correct. A confirmed trip also needs an approved waybill before funds can be logged." }
+      screen: "budget", stage: 5, role: "accounting", fill: "budget", target: "#budgetForm .form-card", title: "Record released funds",
+      body: "Log each cash, cheque, or PO release with its amount and reference. Trip details carry over. The app records disbursements; it does not transfer money."
     },
     {
-      chapter: 2, screen: "waybill", stage: 2, target: ".waybill-paper", title: "Prepare the digital waybill",
-      body: "The trip's company, destination, cargo, date, and plate are already carried over. The waybill follows Roadlink's printable form.",
-      action: "Complete the driver, shipment, rates, and expense fields. On a phone, swipe sideways across the paper to inspect the remaining columns.",
-      outcome: "The waybill is the proposal for approval. Amounts typed here are not yet disbursed funds."
+      screen: "client", stage: 6, role: "client", cancellation: true, target: "[data-complete-cancel]", title: "The client cancels",
+      body: "The client chooses Cancel Booking, enters a reason, and submits. A chat message alone does not cancel a trip. Here, funds were already released."
     },
     {
-      chapter: 2, screen: "waybill", stage: 3, target: "[data-action='submitWaybill']", title: "Submit it to the manager",
-      body: "Mika taps Save and submit. The waybill is now Submitted and the manager receives an in-app notification.",
-      action: "After submitting, let the manager review it. Print waybill opens the printable copy; Email waybill sends the trip's waybill by email.",
-      outcome: "The coordinator prepares the record. The manager and accounting use their own accounts to approve it."
+      screen: "dashboard", stage: 7, role: "owner", target: ".alert-card", title: "Roadlink sees an urgent alert",
+      body: "The trip shows Cancelled - Funds Released and For immediate checking. Management and accounting can see what needs checking. Cancellation does not return money automatically."
     },
     {
-      chapter: 2, screen: "waybill", stage: 3, role: "owner", target: "[data-action='managerSign']", title: "The manager approves in the app",
-      body: "The manager opens the submitted trip's waybill and reviews the route, driver, and proposed costs.",
-      action: "Choose Approve (Manager) after checking the details. Approval records the manager's identity in the trip history.",
-      outcome: "The waybill becomes Manager Signed, and accounting is notified. An email notice is a backup; the approval happens here."
+      screen: "reconcile", stage: 7, role: "accounting", target: "#reconcileForm .form-card", title: "Accounting checks every release",
+      body: "Record cash returned, cheques voided, POs cancelled, or expenses already used. Complete checking only when every released item has been resolved."
     },
     {
-      chapter: 2, screen: "waybill", stage: 4, role: "accounting", target: "[data-action='financeSign']", title: "Accounting checks and approves finance",
-      body: "Accounting opens the same waybill with the manager's approval already recorded. There is no need to recreate the trip.",
-      action: "Review the costs and choose Approve (Finance). Finance approval follows manager approval.",
-      outcome: "The waybill becomes Approved. With client confirmation also recorded, the release log is now available."
+      screen: "audit", stage: 8, role: "owner", target: ".timeline", title: "Review the full history",
+      body: "Open Audit timeline to see who booked, confirmed, approved, released funds, and cancelled. Completing checking keeps the full history intact."
     },
     {
-      chapter: 2, screen: "budget", stage: 5, role: "accounting", fill: "budget", target: "#budgetForm .form-card", title: "Record what was actually released",
-      body: "From Trip Detail, accounting taps Log budget release. Company, vehicle, plate, and waybill are already attached.",
-      action: "Choose Cash, enter 15,000, add the purpose or reference, and Save release log. Add separate entries for the PHP 42,000 shipping cheque and PHP 18,000 fuel PO.",
-      outcome: "Each saved entry is a release record. The app logs disbursements; it does not transfer money.", next: "See all three releases"
-    },
-    {
-      chapter: 2, screen: "detail", stage: 6, role: "accounting", target: ".budget-list", title: "PHP 75,000 is now accounted for",
-      body: "The sample trip now shows PHP 15,000 cash, PHP 42,000 by cheque, and PHP 18,000 by PO. Its status is Funds Released.",
-      action: "Open the trip to review release amounts and references. Use Audit to see who recorded each action.",
-      outcome: "If the client cancels, management can see the entire exposure, including cash and supplier commitments."
-    },
-    {
-      chapter: 3, screen: "detail", stage: 2, earlyCancellation: true, target: ".detail-hero", title: "First: a cancellation before any release",
-      body: "Here is the simpler branch: the client cancels while the trip has no released cash, cheque, or PO.",
-      action: "The client taps Cancel Booking on the secure page, enters a reason, and submits the cancellation.",
-      outcome: "Staff see Cancelled and the reason is recorded. There are no released funds to return. Next we'll return to the PHP 75,000 example."
-    },
-    {
-      chapter: 3, screen: "client", stage: 6, role: "client", cancellation: true, target: "[data-complete-cancel]", title: "Now: Ana cancels after the release",
-      body: "Return to our funded trip. Ana uses the secure client page, chooses Cancel Booking, and gives a reason: shipment postponed by the buyer.",
-      action: "The client reviews the reason and taps Submit cancellation. Contact Roadlink alone would only request a follow-up.",
-      outcome: "Submitting records the cancellation and triggers the funded-trip checking workflow.", next: "Show the alert"
-    },
-    {
-      chapter: 3, screen: "dashboard", stage: 7, role: "owner", target: ".alert-card", title: "Management sees For immediate checking",
-      body: "The trip becomes Cancelled - Funds Released. An urgent alert appears for management and accounting because PHP 75,000 was already logged.",
-      action: "Open the flagged trip to inspect its releases. Accounting opens the checking task to record what was returned, voided, cancelled, or already used.",
-      outcome: "Cancellation does not automatically return cash or cancel a cheque. Those actions must be checked and recorded.",
-      check: { question: "Does cancelling the trip automatically return the PHP 15,000?", options: ["Yes, the app reverses it", "No, accounting must verify and record the return"], correct: 1, explanation: "Correct. The alert creates visibility; accounting still verifies the real cash and supplier transactions." }
-    },
-    {
-      chapter: 3, screen: "reconcile", stage: 7, role: "accounting", target: "#reconcileForm .form-card", title: "Accounting closes the loop",
-      body: "Open the trip, then Open checking task. For this example, all PHP 15,000 cash is returned, the shipping cheque is voided, and the fuel PO is cancelled.",
-      action: "Record each item's actual outcome and explain any expense already used. Choose Mark checking complete once every release has been resolved.",
-      outcome: "The trip becomes Reconciled and leaves the immediate-checking queue. It remains available in the trip history.", next: "See the completed record"
-    },
-    {
-      chapter: 3, screen: "audit", stage: 8, role: "owner", target: ".timeline", title: "The audit timeline tells the whole story",
-      body: "Open Audit from Trip Detail, or Audit timeline on its dashboard card. The history shows booking, confirmation, approvals, releases, cancellation, and reconciliation.",
-      action: "Read who acted and when. Use the timeline alongside the release references to review a disputed transaction.",
-      outcome: "Reconciling closes the checking task; it does not erase the cancellation or the money trail."
-    },
-    {
-      chapter: 4, screen: "clientPortal", stage: 1, role: "client", target: ".client-portal-hero", title: "Clients can also use an optional portal",
-      body: "A client chooses Client portal on the home page and signs in with approved access. They see their company's bookings and requests.",
-      action: "Open a booking to review route, date, cargo, and status. Pending bookings can be confirmed or cancelled.",
-      outcome: "Client screens keep internal budgets, staff audit records, and approval controls private. Email links remain available."
-    },
-    {
-      chapter: 4, screen: "clientBooking", stage: 1, role: "client", fill: "request", target: "#clientBookingForm", title: "The client requests a new booking",
-      body: "In the portal, tap Request new booking. Ana enters the route, vehicle, date, and cargo requirements.",
-      action: "Submit the request for Roadlink to review. The company and authorized contact identify who is requesting the service.",
-      outcome: "This creates a booking request, not an official trip. Staff still review availability and arrange the vehicle."
-    },
-    {
-      chapter: 4, screen: "dashboard", stage: 1, target: ".request-list", title: "The coordinator reviews the portal request",
-      body: "Back on the staff dashboard, Client booking requests lists the route, company, vehicle, and date requested by the client.",
-      action: "Review the request with the client and check availability first. Selecting the request in this version converts it into an official trip.",
-      outcome: "The official booking then follows the same confirmation, waybill, approval, and release process. Invoice access and GPS tracking are future additions."
-    },
-    {
-      chapter: 5, screen: "detail", stage: 2, target: ".chat-entry", title: "Keep conversations with their trip",
-      body: "Open Trip messages inside Trip Detail. Clients have the same entry in their booking details, so questions about a loading time or address stay with that booking.",
-      action: "Use the chat demo to try a conversation between Roadlink and its client. Each booking has its own sample conversation.",
-      outcome: "For this preview, messages stay on the current device. Live delivery between different users and devices comes in the next phase."
-    },
-    {
-      chapter: 5, screen: "detail", stage: 2, preview: "chatStaff", title: "Read and reply as Roadlink",
-      body: "Mika sees Ana's question about changing the loading time. A message shows who sent it and when; unread badges identify a reply waiting in the other view.",
-      action: "Choose Roadlink staff, type a reply or pick a suggested message, then tap Send. Choose Client to read it from Ana's side.",
-      outcome: "Switching views in the demo marks received messages as read. You can try both sides without creating accounts.", tryChat: true
-    },
-    {
-      chapter: 5, screen: "detail", stage: 2, role: "client", preview: "chatClient", title: "Clients reply in the same conversation",
-      body: "Ana can ask about the shipment and reply to the coordinator. She sees the trip's conversation without Roadlink's internal costs or approval controls.",
-      action: "In the demo, switch to Client, send a message, then return to Roadlink staff to read it. Reset demo restores the sample messages.",
-      outcome: "A message does not confirm or cancel a booking. Those actions still use the booking buttons, keeping the trip status unambiguous.", tryChat: true
-    },
-    {
-      chapter: 6, screen: "detail", stage: 2, preview: "recap", title: "Your everyday Roadlink workflow",
-      body: "Coordinator books and prepares. Client confirms. Manager approves. Accounting approves finance and logs the releases. If the client cancels, accounting checks the money trail.",
-      action: "To work in the app: log in, open your dashboard, then use New trip or Open trip. The ? button replays this tour whenever you need it.",
-      outcome: "Finish returns you to the screen you were using. You can replay any chapter or open the hands-on chat demo below.", tryChat: true,
-      check: { question: "Who resolves a cancelled trip's released funds?", options: ["The coordinator deletes the booking", "Accounting records the outcome of each release"], correct: 1, explanation: "Exactly. Accounting resolves the released items, while management can review the trip and its audit timeline." }, next: "Finish walkthrough"
+      screen: "clientPortal", stage: 1, role: "client", target: ".client-portal-hero", title: "Try the client portal",
+      body: "Clients can request bookings, view trips, and message Roadlink using their own access. Internal costs stay private. Chat is a same-device demo for now.",
+      clientDemo: true
     }
   ];
 
@@ -183,36 +73,6 @@
   let observer;
   let lastFocus;
   const app = () => document.querySelector("#app");
-  const tips = [
-    "Follow one Cebu-to-Leyte booking through confirmation, approvals, cash release, and cancellation. These are sample records. At the end, you can explore the demo yourself.",
-    "Choose your assigned role, then enter your email or username and password. Coordinators prepare bookings, managers approve, and accounting records the money. This tour switches roles for you.",
-    "New staff choose Create account request and enter their name, email, and requested role. Access is granted only after an owner or admin reviews the request.",
-    "Owners and admins open Users & access. Review each request, then Approve or Decline. Approval issues temporary credentials for that person's own account.",
-    "This is the trips workspace. Use the status filters to find a booking, or choose New trip. Open trip brings together its client, waybill, releases, and history.",
-    "Enter the company and the person authorized to confirm or cancel. Their email receives the confirmation; phone, WhatsApp, and Viber support follow-up. The sample values here belong only to this tour.",
-    "Choose From, To, vehicle type, plate number, and date, then add cargo notes. Create trip sends the confirmation in the connected app. These details carry into the waybill.",
-    "The client receives this branded email with route, date, vehicle, and three choices: confirm, cancel, or contact Roadlink. The secure review link works without an app or account.",
-    "The client checks the details and selects Confirm Booking. Opening the email alone does not confirm the trip. Contact Roadlink asks the coordinator to follow up.",
-    "Confirmed means the client accepted the booking. Money has not been released yet. Next, the coordinator opens the waybill and prepares the proposed costs.",
-    "Trip details are already filled in. Complete the driver, rates, and expense amounts. On a phone, swipe across the paper to inspect the remaining columns. These are proposed costs, not released funds.",
-    "Save and submit sends the waybill to the manager's approval queue. The coordinator prepares it; the manager and finance approve with their own accounts. You can also print or email the waybill.",
-    "The manager reviews the submitted waybill and chooses Approve (Manager). Their identity is recorded, and accounting is notified to perform the finance review.",
-    "Accounting reviews the same waybill and chooses Approve (Finance). Both approvals plus client confirmation must be recorded before a release can be logged.",
-    "Accounting chooses the release type, amount, and purpose or reference. Save one entry per cash, cheque, or PO release. The app records what was disbursed; it does not transfer money.",
-    "This sample now has PHP 15,000 cash, a PHP 42,000 cheque, and a PHP 18,000 PO: PHP 75,000 total. Each release stays attached to the trip, ready for checking if it is cancelled.",
-    "If the client cancels before any release, the trip becomes Cancelled. The reason stays in its history, and there are no released funds to recover. Now let's see the funded case.",
-    "The client chooses Cancel Booking, enters a reason, and submits. Here the shipment was postponed after money was released. A chat message or contact request alone does not cancel the booking.",
-    "The status becomes Cancelled - Funds Released, with For immediate checking. Management sees the exposure, and accounting checks the actual cash, cheque, and PO. Cancellation never returns money automatically.",
-    "Accounting records whether cash was returned, the cheque was voided, and the PO was cancelled, plus any used expenses. Complete checking only when every release is resolved.",
-    "Open Audit timeline to see who booked, confirmed, approved, released, cancelled, and reconciled. Completing reconciliation removes the urgent task while preserving the full record.",
-    "Clients may use the optional portal to see their own bookings and requests. They cannot see Roadlink's budgets, staff audit history, or accounting controls. Email confirmation links are still available.",
-    "Request new booking collects the route, truck, date, cargo, and contact. It creates a request for staff review, not an official trip. The coordinator still checks availability.",
-    "Client booking requests appear here. Review availability and contact the client before selecting a request to convert it into an official trip. It then follows the same confirmation and approval process.",
-    "Trip messages keeps questions and replies with the booking. Staff open it from Trip Detail; clients open it from Booking Detail. The current conversation is a demo kept in this browser tab.",
-    "The coordinator reads the client's loading question and sends a reply. In the hands-on demo, switch between Roadlink staff and Client to try both sides. Unread badges and read status update as you switch.",
-    "The client replies in the same conversation without seeing internal costs. Use Try the chat demo to write a message. Confirmation and cancellation still use their booking buttons.",
-    "You're ready to explore. Create bookings as coordinator, switch to Manager for approval, then Accounting for releases and checking. The top demo selector changes roles. Reopen this tour with the ? button."
-  ];
 
   function sampleTrip(step) {
     const stage = step.stage || 0;
@@ -307,10 +167,10 @@
     host.innerHTML = `
       <div class="tour-blocker"></div><div class="tour-spotlight" aria-hidden="true"></div>
       <div class="tour-dialog" role="dialog" aria-modal="true" aria-labelledby="tourTitle" aria-describedby="tourBody">
-        <header class="tour-compact-header"><span>${index + 1} OF ${steps.length} · ${step.role === "client" ? "CLIENT" : step.role === "owner" ? "MANAGER" : step.role === "accounting" ? "ACCOUNTING" : "ROADLINK"}</span><button type="button" class="tour-skip" data-tour="close">Skip tour</button></header>
+        <header class="tour-compact-header"><span>${index + 1} OF ${steps.length} · ${step.role === "client" ? "CLIENT" : step.role === "owner" ? "MANAGER" : step.role === "accounting" ? "ACCOUNTING" : "COORDINATOR"}</span><button type="button" class="tour-skip" data-tour="close">Skip tour</button></header>
         <div class="tour-content">
-          <h2 id="tourTitle" tabindex="-1">${step.title}</h2><p id="tourBody" class="tour-copy">${tips[index]}</p>
-          ${step.tryChat ? `<button class="secondary tour-try-chat" type="button" data-tour="chat">Try the chat demo</button>` : ""}
+          <h2 id="tourTitle" tabindex="-1">${step.title}</h2><p id="tourBody" class="tour-copy">${step.body}</p>
+          ${step.clientDemo ? `<a class="workspace-demo-link" href="?demo=client${document.body.classList.contains("mobile-preview") ? "&mobile=1" : ""}" target="_blank" rel="noopener">Open client demo</a>` : ""}
         </div>
         <footer class="tour-footer"><button type="button" class="ghost" data-tour="back" ${index === 0 ? "disabled" : ""}>Back</button><button type="button" class="primary" data-tour="next">${index === steps.length - 1 ? "Explore the app" : "Next"}</button></footer>
       </div>`;
@@ -338,7 +198,7 @@
     const frame = document.querySelector("#phoneFrame");
     const bounds = frame.getBoundingClientRect();
     const dialog = host.querySelector(".tour-dialog");
-    const overrides = { home: ".home-logo", accountRequest: "#requestEmail", newTrip: index === 6 ? "#origin" : "#client" };
+    const overrides = { home: ".home-logo", accountRequest: "#requestEmail", newTrip: "#client" };
     let target = app().querySelector(overrides[step.screen] || step.target || ".topbar h2");
     if (step.target === ".waybill-paper") target = app().querySelector(".waybill-heading");
     if (step.preview === "email") target = app().querySelector(".tour-mail-body h2");

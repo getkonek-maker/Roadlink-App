@@ -4,11 +4,11 @@
     id: "DEMO-CHAT-1001", route: "Cebu to Leyte", client: "Mactan Seafoods Export",
     contact: "Ana Lim", coordinator: "Mika Santos", vehicle: "10-wheeler truck"
   };
-  const sides = { staff: "Roadlink staff", client: "Client" };
   let active = false;
   let snapshot;
   let context;
   let side = "staff";
+  let senderName = "";
   let messages = [];
   let drafts = { staff: "", client: "" };
   let notice = "";
@@ -48,24 +48,22 @@
     save();
   }
 
-  function html(trip, view, thread, draft = "", feedback = "") {
+  function html(trip, view, thread, draft = "", feedback = "", actorName = "") {
     const escape = escapeUiText;
     const other = view === "staff" ? "client" : "staff";
-    const unread = (forSide) => thread.filter((message) => message.side !== forSide && !message.readBy.includes(forSide)).length;
     const suggestions = view === "staff" ? ["8 AM loading is noted. Thank you.", "Please confirm the loading address."] : ["Thank you, noted.", "Could you confirm the pickup time?"];
     return `<section class="screen chat-screen">
       <header class="topbar chat-topbar"><button class="icon-btn" type="button" data-chat-exit aria-label="Exit chat demo">&lt;</button><h2>Trip messages</h2><span class="chat-demo-badge">Demo</span></header>
       <div class="chat-trip-context"><span>${escape(trip.id)}</span><strong>${escape(trip.route)}</strong><small>${escape(trip.client)} · ${escape(trip.vehicle)}</small></div>
       <div class="chat-demo-controls">
         <p>Sample conversation. Messages stay on this device.</p>
-        <div class="chat-view-tabs" role="tablist" aria-label="Demo conversation view">${Object.entries(sides).map(([key, label]) => `<button type="button" role="tab" aria-selected="${key === view}" aria-controls="chatThread" id="chatTab-${key}" data-chat-view="${key}" tabindex="${key === view ? 0 : -1}">${label}${unread(key) ? `<span class="chat-unread" aria-label="${unread(key)} unread">${unread(key)}</span>` : ""}</button>`).join("")}</div>
       </div>
-      <div class="chat-thread" id="chatThread" role="tabpanel" aria-labelledby="chatTab-${view}" tabindex="0">
+      <div class="chat-thread" id="chatThread" role="region" aria-label="Trip messages" tabindex="0">
         <p class="chat-day">Sample booking conversation</p>
         <div role="log" aria-label="Trip conversation" aria-live="polite" aria-relevant="additions text">${thread.map((message) => `<article class="chat-message ${message.side === view ? "outgoing" : "incoming"}"><span class="chat-sender">${escape(message.name)} · ${message.side === "staff" ? "Roadlink" : "Client"}</span><p>${escape(message.text)}</p><div class="chat-message-meta"><time datetime="${escape(message.at)}">${new Date(message.at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</time>${message.side === view ? `<span>${message.readBy.includes(other) ? "Read in demo" : "Sent in demo"}</span>` : ""}</div></article>`).join("")}</div>
       </div>
       <div class="chat-composer-area">
-        <p class="chat-sending-as">Writing as ${escape(view === "staff" ? trip.coordinator || "Roadlink coordinator" : trip.contact || "Client contact")}</p>
+        <p class="chat-sending-as">Writing as ${escape(actorName || (view === "staff" ? trip.coordinator || "Roadlink coordinator" : trip.contact || "Client contact"))}</p>
         <div class="chat-suggestions" aria-label="Suggested replies">${suggestions.map((text, i) => `<button type="button" data-chat-suggestion="${i}">${text}</button>`).join("")}</div>
         <form id="demoChatForm" class="chat-composer"><label class="tour-sr-only" for="chatMessage">Message</label><textarea id="chatMessage" name="message" rows="2" maxlength="1000" placeholder="Write a message..." required>${escape(draft)}</textarea><button class="primary" type="submit" ${!draft.trim() ? "disabled" : ""} aria-label="Send demo message">Send</button></form>
         <p class="chat-feedback" role="status">${escape(feedback)}</p>
@@ -75,7 +73,7 @@
   }
 
   function renderChat() {
-    return html(context || demoTrip, side, messages, drafts[side], notice);
+    return html(context || demoTrip, side, messages, drafts[side], notice, senderName);
   }
 
   function redraw({ bottom = false, focus = false } = {}) {
@@ -112,27 +110,11 @@
         notice = "This demo holds up to 100 messages. Reset the demo to start a fresh conversation.";
         redraw(); return;
       }
-      messages.push({ id: crypto.randomUUID(), side, name: side === "staff" ? context.coordinator || "Roadlink coordinator" : context.contact || "Client contact", text, at: new Date().toISOString(), readBy: [side] });
+      messages.push({ id: crypto.randomUUID(), side, name: senderName, text, at: new Date().toISOString(), readBy: [side] });
       drafts[side] = "";
-      notice = "Message added to this demo. Switch views to read and reply.";
+      notice = "Saved in this demo only. No message was sent to another person.";
       save();
       redraw({ bottom: true, focus: true });
-    });
-    const switchView = (value) => {
-      side = value;
-      notice = "";
-      markRead(side);
-      redraw({ bottom: true });
-      document.querySelector(`[data-chat-view="${side}"]`).focus({ preventScroll: true });
-    };
-    document.querySelectorAll("[data-chat-view]").forEach((button) => {
-      button.addEventListener("click", () => switchView(button.dataset.chatView));
-      button.addEventListener("keydown", (event) => {
-        if (["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) {
-          event.preventDefault();
-          switchView(event.key === "Home" ? "staff" : event.key === "End" ? "client" : side === "staff" ? "client" : "staff");
-        }
-      });
     });
     document.querySelectorAll("[data-chat-suggestion]").forEach((button) => button.addEventListener("click", () => {
       drafts[side] = button.textContent;
@@ -147,14 +129,17 @@
     });
   }
 
-  function start(trip, initialSide = "staff") {
+  function start(trip) {
     if (active || window.roadlinkWalkthrough?.active) return;
     snapshot = structuredClone(state);
     previousScroll = document.querySelector("#app").scrollTop;
     previousFocus = document.activeElement?.getAttribute("data-action");
     const source = trip || demoTrip;
     context = Object.fromEntries(Object.keys(demoTrip).map((key) => [key, String(source[key] || demoTrip[key]).slice(0, 150)]));
-    side = initialSide === "client" ? "client" : "staff";
+    side = state.clientSession && !state.session ? "client" : "staff";
+    senderName = String(side === "client"
+      ? state.clientSession.contact || state.clientSession.name || context.contact
+      : state.session?.profile?.name || context.coordinator).slice(0, 150);
     drafts = { staff: "", client: "" };
     messages = readMessages(context);
     notice = "";

@@ -18,6 +18,7 @@ body { background: #f4f6f9; }
 .workspace-demo-label { margin-right: auto; font-size: 12px; font-weight: 700; color: #334f68; }
 .workspace-demo-bar select { width: auto; max-width: 175px; height: 32px; border: 1px solid #c8d5e1; border-radius: 4px; background: white; padding: 3px 7px; font-size: 12px; color: #234363; }
 .workspace-demo-bar button { min-height: 32px; padding: 4px 8px; border: 0; border-radius: 4px; color: #3d5871; background: #e4edf3; font-size: 12px; }
+.workspace-demo-link { display: inline-flex; align-items: center; min-height: 32px; padding: 4px 8px; color: #24459d; font-size: 12px; text-decoration: underline; }
 .workspace-shell .topbar { min-height: 66px; background: #fff; }
 .workspace-shell .content { width: 100%; max-width: 1280px; margin-inline: auto; padding: 22px; }
 .workspace-shell .home-screen { min-height: 100%; }

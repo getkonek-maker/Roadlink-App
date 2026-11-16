@@ -22,10 +22,15 @@
 - Public hands-on chat preview: `https://roadlink-app.onrender.com/?chat-demo=1`
 - Both routes work without creating a staff/client account. They use isolated
   sample data and preserve any signed-in session on exit.
-- Asset/cache release marker: `web-app-v12`; PWA cache version 12.
+- Asset/cache release marker: `web-app-v13`; PWA cache version 13.
+- Client demo: `https://roadlink-trip-control.netlify.app/?demo=client`.
+- November 16 update: 15 short in-app tour steps; separate staff/client demo
+  entrances; chat sender follows the current account. Nine automated tests and
+  browser checks across desktop, phone, and landscape pass. This remains a demo:
+  no external chat delivery or email activation is added in this release.
 - The tour now uses small in-app spotlight dialogs, not a separate side panel.
   Back, Next, Skip, focus management, responsive positioning, and restoration
-  cover all 28 steps on desktop, phone, and landscape.
+  cover all 15 short steps on desktop, phone, and landscape.
 - Desktop navigation, trip table, waybill approval queue, two-column booking
   forms, role switching, and compact phone layout share the same application.
 - `?demo=1` runs the entire booking/approval/release/cancellation/reconciliation
@@ -46,12 +51,13 @@
   selection, presentation records, and simulated API responses. No real writes.
 - `netlify.toml`: frontend publishing and same-origin `/api/*` proxy to Render.
 - `scripts/build-web.mjs`: explicit public-file build into ignored `dist/`.
-- `walkthrough.js`: isolated 28-step guided tour, launched from home/login,
+- `walkthrough.js`: isolated 15-step quick tour, launched from home/login,
   header help, or `?walkthrough=2`. It reuses real screens, restores application
   state on exit, and prevents all API calls while active. No server writes.
 - `demo-chat.js`: per-trip messaging preview, launched by `?chat-demo=1`, Trip
-  messages buttons, or the tour. Switches staff/client perspective, tracks local
-  unread/read states, and stores messages in sessionStorage only. No live chat
+  messages buttons. Locks sender identity to the active account, with no switch
+  inside chat. Separate client entry: `?demo=client`. Stores messages in
+  sessionStorage only. No live chat
   API, external notifications, or shared database messages yet. Never represent
   this preview as live communication. The active demo blocks API requests and
   restores prior application state on exit.

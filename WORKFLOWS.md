@@ -3,19 +3,19 @@
 ## Learn In The App
 
 Open `/?demo=1&walkthrough=2` or choose **Take a guided tour**. The guided dialogs
-explain who performs each action, what to choose, and its result using one
+use 15 short steps to explain who performs each action and what to choose using one
 sample trip. Each short dialog appears inside the app and highlights the
 relevant control. Use **Back**, **Next**, or **Skip tour**. Finish returns to an
 explorable sample workspace rather than a presentation panel.
 
 The tour switches sample roles automatically and never changes saved records
 or sends an email. Finish returns to the starting screen. The **?** in screen
-headers reopens it. GPS tracking and invoices are identified as future work.
+headers reopens it. GPS tracking and invoices remain future work.
 
 ## Demo On A Laptop Or Phone
 
 Open `https://roadlink-trip-control.netlify.app/?demo=1` for the full desktop
-workspace. Use the View as selector to change roles and follow the same trip
+workspace. Use the Preview role selector to change staff roles and follow the same trip
 through each approval. Phone view narrows the layout for laptop presentations;
 actual phones use their own full screen automatically. Desktop view returns to
 the table and sidebar.
@@ -28,17 +28,20 @@ All these actions remain in the browser demo and send no real emails.
 
 ## Trip Messages Preview
 
-1. Open `/?chat-demo=1`, choose Trip messages in a trip, or select Try the chat
-   demo in the walkthrough's Trip messages chapter.
-2. Select Roadlink staff, write a message or choose a suggested reply, and Send.
-3. Select Client to read the message and reply; the other view shows an unread
-   badge until opened. Read indicators refer only to this local demo.
+1. Open the staff demo at `/?demo=1` or the client demo at `/?demo=client`.
+2. Open a trip or booking, then choose Trip messages.
+3. Write a message or choose a suggested reply, then Send. Your sender identity
+   stays fixed to your current account; there is no switch inside chat.
 4. Choose Reset demo to restore the sample conversation, or the back arrow to
    exit to the original screen.
 
 Messages stay in the current browser tab and are separate for each trip. No
 external client receives the messages. Confirmations, cancellations, approvals,
 and money movements must still use their normal booking controls.
+
+The staff and client demo links open separate sample experiences, not a live
+conversation between tabs or devices. Client activation from email is planned;
+it is not enabled by these demo links.
 
 ## Production Pilot Status
 

@@ -13,7 +13,7 @@
     state.session = role === "client" ? null : { profile: { id: `DEMO-${role}`, name: person, role } };
   }
 
-  function startDemo() {
+  function startDemo(initialRole = "coordinator") {
     if (demoActive) return;
     snapshot = structuredClone(state);
     demoActive = true;
@@ -33,9 +33,9 @@
     checking.timeline.push(eventLine("Client cancelled after funds were released; accounting notified"));
     state.trips.push(checking);
     state.bookingRequests[0].date = state.trips[0].date;
-    setRole("coordinator");
-    state.screen = "dashboard";
-    const url = new URL(location.href); url.searchParams.set("demo", "1"); history.replaceState(null, "", url);
+    setRole(initialRole === "client" ? "client" : "coordinator");
+    state.screen = demoRole === "client" ? "clientPortal" : "dashboard";
+    const url = new URL(location.href); url.searchParams.set("demo", demoRole === "client" ? "client" : "1"); history.replaceState(null, "", url);
     render();
   }
 
@@ -60,7 +60,8 @@
     nav.innerHTML = `<div class="workspace-brand"><img src="assets/roadlink-logo.svg" alt="Roadlink Cargo Transport Service"><span>Trip Control</span></div><nav>${items.map(([screen, label]) => `<button type="button" data-workspace-nav="${screen}" class="${state.screen === screen || (screen === "openReconcile" && state.screen === "reconcile") ? "is-current" : ""}">${label}${screen === "openReconcile" && state.trips.some((trip) => trip.status === "needs") ? `<b>${state.trips.filter((trip) => trip.status === "needs").length}</b>` : ""}</button>`).join("")}</nav><div class="workspace-nav-footer"><button type="button" data-workspace-tour>Guided tour</button><button type="button" data-workspace-phone>${document.body.classList.contains("mobile-preview") ? "Desktop view" : "Phone view"}</button><div class="workspace-person"><span class="workspace-avatar">${client ? "AL" : initials(state.session?.profile?.name || "Roadlink")}</span><div><strong>${escapeUiText(client ? state.clientSession.contact || state.clientSession.name : state.session?.profile?.name || "Roadlink staff")}</strong><small>${client ? "Client" : roleLabel()}</small></div></div></div>`;
     const toolbar = document.querySelector("#demoToolbar");
     toolbar.hidden = !demoActive || window.roadlinkWalkthrough?.active || window.roadlinkDemoChat?.active;
-    toolbar.innerHTML = demoActive ? `<span class="workspace-demo-label">Demo workspace</span><label for="demoRole">View as</label><select id="demoRole">${[...roles.map((role) => [role.id, role.label]), ["client", "Client"]].map(([id,label]) => `<option value="${id}" ${demoRole === id ? "selected" : ""}>${label}</option>`).join("")}</select><button type="button" data-workspace-phone>${document.body.classList.contains("mobile-preview") ? "Desktop view" : "Phone view"}</button><button type="button" data-workspace-exit>Exit demo</button>` : "";
+    const otherDemoUrl = `?demo=${client ? "1" : "client"}${document.body.classList.contains("mobile-preview") ? "&mobile=1" : ""}`;
+    toolbar.innerHTML = demoActive ? `<span class="workspace-demo-label">${client ? "Client demo" : "Staff demo"}</span>${client ? `<span>Ana Lim</span>` : `<label for="demoRole">Preview role</label><select id="demoRole">${roles.map((role) => `<option value="${role.id}" ${demoRole === role.id ? "selected" : ""}>${role.label}</option>`).join("")}</select>`}<a class="workspace-demo-link" href="${otherDemoUrl}" target="_blank" rel="noopener">${client ? "Open staff demo" : "Open client demo"}</a><button type="button" data-workspace-phone>${document.body.classList.contains("mobile-preview") ? "Desktop view" : "Phone view"}</button><button type="button" data-workspace-exit>Exit demo</button>` : "";
     const locked = Boolean(window.roadlinkWalkthrough?.active || window.roadlinkDemoChat?.active);
     nav.inert = locked;
     toolbar.inert = locked;
