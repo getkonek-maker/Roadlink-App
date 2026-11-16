@@ -285,7 +285,7 @@ function clientActionToken(tripId) {
 async function openClientPreview(tripId) {
   state.clientPreviewTripId = tripId;
   state.cancellationFormOpen = false;
-  if (state.dataMode === "local-demo" && state.session) {
+  if (["local-demo", "presentation-demo"].includes(state.dataMode) && state.session) {
     try {
       const result = await apiRequest("/api/demo/client-link", {
         method: "POST",
@@ -330,6 +330,7 @@ async function apiRequest(path, options = {}) {
   if (window.roadlinkWalkthrough?.active || window.roadlinkDemoChat?.active) {
     throw new Error("Exit the demo before working with saved records.");
   }
+  if (window.roadlinkWorkspace?.demoActive) return window.roadlinkWorkspace.request(path, options);
   const token = sessionToken();
   const response = await fetch(path, {
     ...options,
@@ -446,6 +447,7 @@ function syncTripFromServer(trip) {
 }
 
 async function sendTripEmail(kind, trip) {
+  if (window.roadlinkWorkspace?.demoActive) return { ok: false, message: "Demo email preview. No email was sent." };
   try {
     const response = await fetch("/api/send-email", {
       method: "POST",
@@ -490,7 +492,7 @@ function clearRememberedLogin() {
 }
 
 function setToast(message, duration = 2600) {
-  state.toast = message;
+  state.toast = window.roadlinkWorkspace?.demoActive && !/^Demo/i.test(message) ? `Demo: ${message}` : message;
   render();
   window.clearTimeout(setToast.timer);
   setToast.timer = window.setTimeout(() => {
@@ -530,12 +532,14 @@ function render() {
     reconcile: renderReconcile,
     audit: renderAudit,
     waybill: renderWaybill,
+    waybills: renderWaybillQueue,
     users: renderUsers,
     chat: () => window.roadlinkDemoChat.render()
   };
 
   app.innerHTML = (views[state.screen] || renderLogin)();
   app.scrollLeft = 0;
+  window.roadlinkWorkspace?.renderChrome();
   bindScreenEvents();
 }
 
@@ -547,7 +551,7 @@ function topbar(title, right = "") {
   return `
     <header class="topbar">
       ${back}
-      <h2>${title === "Roadlink" ? `<img class="topbar-logo" src="assets/roadlink-logo.svg" alt="Roadlink">` : title}</h2>
+      <h2>${title === "Roadlink" ? `<span class="workspace-desktop-title">Trips</span><img class="topbar-logo" src="assets/roadlink-logo.svg" alt="Roadlink">` : title}</h2>
       <div class="topbar-tools">${right}<button class="tour-help" type="button" data-action="startWalkthrough" aria-label="Open guided walkthrough" title="Guided walkthrough">?</button></div>
     </header>
   `;
@@ -564,6 +568,7 @@ function renderHome() {
           <button class="primary wide home-login" type="button" data-action="login">Staff log in</button>
           <button class="ghost wide home-client-login" type="button" data-action="clientLogin">${state.dataMode === "supabase" ? "Client portal" : "Client portal preview"}</button>
           <button class="home-tour-link" type="button" data-action="startWalkthrough">Take a guided tour</button>
+          <button class="home-tour-link" type="button" data-action="startDemo">Explore the demo</button>
           <span>${state.operationalReady ? "Live Operations" : (state.dataMode === "supabase" ? "Production Pilot" : "Demo Mode")}</span>
         </div>
       </div>
@@ -716,6 +721,12 @@ function clientRequests() {
   return state.bookingRequests.filter((request) => request.company === state.clientSession.company || request.email === state.clientSession.email);
 }
 
+function clientBookingStatus(status) {
+  if (status === "funds") return "confirmed";
+  if (["needs", "reconciled"].includes(status)) return "cancelled";
+  return status;
+}
+
 function renderClientPortal() {
   const client = state.clientSession || clientDemoUsers[0];
   const trips = clientTrips();
@@ -748,7 +759,7 @@ function renderClientPortal() {
               <button class="client-trip-card" type="button" data-client-trip-detail="${trip.id}">
                 <strong>${trip.origin} to ${trip.destination}</strong>
                 <span>${displayDate(trip.date)} • ${trip.vehicle}</span>
-                <small class="status-pill ${statusClass(trip.status)}">${statusLabels[trip.status]}</small>
+                <small class="status-pill ${clientBookingStatus(trip.status)}">${statusLabels[clientBookingStatus(trip.status)]}</small>
               </button>
             `).join("") || `<span class="muted">No active bookings yet.</span>`}
           </div>
@@ -845,7 +856,7 @@ function renderClientBookingDetail() {
       ${topbar("Booking Detail")}
       <div class="content">
         <article class="client-card">
-          <span class="status-pill ${statusClass(trip.status)}">${statusLabels[trip.status]}</span>
+          <span class="status-pill ${clientBookingStatus(trip.status)}">${statusLabels[clientBookingStatus(trip.status)]}</span>
           <h1>${trip.origin} to ${trip.destination}</h1>
           <div class="trip-fields compact-fields">
             <span><b>Company</b>${trip.client}</span>
@@ -937,7 +948,7 @@ function renderDashboard() {
     <section class="screen">
       ${topbar("Roadlink", `<button class="tiny-btn" type="button" data-action="logout">Role</button>`)}
       <div class="content">
-        <div class="pilot-status">
+        <div class="pilot-status" ${state.dataMode === "presentation-demo" ? "hidden" : ""}>
           <span><b>Status</b>${state.operationalReady ? "Live ready" : "Pilot safeguards"}</span>
           <span><b>Data</b>${state.dataMode === "supabase" ? "Supabase connected" : "Local demo store"}</span>
           <span><b>Email</b>${state.emailConnected ? "Resend ready" : "Configure Resend"}</span>
@@ -969,7 +980,7 @@ function renderDashboard() {
         </div>
 
         ${state.bookingRequests.length ? `
-          <article class="card">
+          <article class="card booking-requests-section">
             <div class="section-head">
               <div>
                 <h3>Client booking requests</h3>
@@ -997,7 +1008,8 @@ function renderDashboard() {
           `).join("")}
         </div>
 
-        <div class="cards">
+        <section class="trip-table-section" aria-label="Trips"><table class="trip-table"><thead><tr><th>Route / company</th><th>Vehicle / plate</th><th>Trip date</th><th>Status</th><th>Budget logged</th><th></th></tr></thead><tbody>${visibleTrips.map((trip) => `<tr><td><strong>${trip.route}</strong><span>${trip.client}</span></td><td><strong>${trip.vehicle}</strong><span>${trip.waybill?.plateNo || "For assignment"}</span></td><td>${displayDate(trip.date)}</td><td><span class="status-pill ${trip.status}">${statusLabels[trip.status]}</span></td><td>${money(totalBudget(trip))}</td><td><button class="tiny-btn" type="button" data-open-trip="${trip.id}">Open trip</button></td></tr>`).join("") || `<tr><td colspan="6">No trips match this status.</td></tr>`}</tbody></table></section>
+        <div class="cards trip-cards">
           ${visibleTrips.map(renderTripCard).join("") || `<div class="card"><strong>No trips here</strong><span>Change the filter or create a new trip.</span></div>`}
         </div>
       </div>
@@ -1264,6 +1276,14 @@ function renderBudget() {
       ${state.toast ? `<div class="toast">${state.toast}</div>` : ""}
     </section>
   `;
+}
+
+function renderWaybillQueue() {
+  const trips = [...state.trips].sort((left, right) => {
+    const priority = { Submitted: 0, "Manager Signed": 1, Draft: 2, Approved: 3 };
+    return (priority[left.waybill.status] ?? 4) - (priority[right.waybill.status] ?? 4);
+  });
+  return `<section class="screen">${topbar("Waybills")}<div class="content"><div class="section-head"><div><h3>Waybill approvals</h3><p>Submitted waybills go to the manager, then finance.</p></div></div><div class="cards">${trips.map((trip) => `<article class="card"><div class="section-head"><div><h3>WB ${trip.waybill.number} · ${trip.route}</h3><p>${trip.client} · ${displayDate(trip.date)}</p></div><span class="status-pill ${trip.waybill.status === "Approved" ? "confirmed" : "pending"}">${trip.waybill.status}</span></div><div class="trip-fields"><span><b>Prepared by</b>${trip.waybill.preparedBy}</span><span><b>Manager</b>${trip.waybill.approvedBy || "Pending"}</span><span><b>Finance</b>${trip.waybill.financeBy || "Pending"}</span><span><b>Plate</b>${trip.waybill.plateNo || "For assignment"}</span></div><button class="secondary" type="button" data-action="waybill" data-trip-action="${trip.id}">Open waybill</button></article>`).join("") || `<p>No waybills yet.</p>`}</div></div></section>`;
 }
 
 function renderWaybill() {
@@ -1823,7 +1843,8 @@ function handleAction(action) {
   const trip = selectedTrip();
   const previous = state.screen;
   const routes = {
-    startWalkthrough: () => window.roadlinkWalkthrough?.start(),
+    startWalkthrough: () => { if (["home", "login"].includes(state.screen)) window.roadlinkWorkspace?.startDemo(); window.roadlinkWalkthrough?.start(); },
+    startDemo: () => window.roadlinkWorkspace?.startDemo(),
     chatStaff: () => window.roadlinkDemoChat?.start(trip),
     chatClient: () => window.roadlinkDemoChat?.start(trip, "client"),
     back: () => {
@@ -1841,7 +1862,7 @@ function handleAction(action) {
     newTrip: () => navigate("newTrip"),
     budget: () => navigate("budget", trip.id),
     clientPreview: () => openClientPreview(trip.id),
-    openReconcile: () => navigate("reconcile", trip.id),
+    openReconcile: () => navigate("reconcile", trip?.id),
     audit: () => navigate("audit", trip.id),
     waybill: () => navigate("waybill", trip.id),
     users: () => navigate("users"),
@@ -1888,6 +1909,7 @@ async function loginStaff(event) {
 }
 
 async function logoutCurrentUser() {
+  if (window.roadlinkWorkspace?.demoActive) { window.roadlinkWorkspace.closeDemo(); return; }
   try {
     await apiRequest("/api/auth/logout", { method: "POST", body: "{}" });
   } catch {
@@ -2251,7 +2273,7 @@ async function cancelTrip(tripId) {
 
   state.screen = state.clientSession ? "clientPortal" : "dashboard";
   state.filter = totalBudget(state.trips.find((trip) => trip.id === tripId)) > 0 ? "needs" : "cancelled";
-  setToast("Cancellation received. Funds released: for immediate checking.");
+  setToast(state.clientSession ? "Booking cancelled. Roadlink has been notified." : state.filter === "needs" ? "Cancellation recorded. For immediate checking." : "Cancellation recorded. No releases logged.");
 }
 
 async function submitWaybill(tripId) {
@@ -2482,6 +2504,14 @@ async function convertBookingRequest(requestId) {
 }
 
 async function initApp() {
+  const launchParams = new URLSearchParams(window.location.search);
+  if (launchParams.get("mobile") === "1") document.body.classList.add("mobile-preview");
+  if (launchParams.has("demo")) {
+    window.roadlinkWorkspace.startDemo();
+    if (launchParams.has("walkthrough")) window.roadlinkWalkthrough.start();
+    else if (launchParams.has("chat-demo")) window.roadlinkDemoChat.start();
+    return;
+  }
   await loadServerState();
 
   const stored = storedSession();
@@ -2528,6 +2558,7 @@ async function initApp() {
   }
   render();
   if (params.has("walkthrough") && window.location.hash !== "#client") {
+    window.roadlinkWorkspace?.startDemo();
     window.roadlinkWalkthrough?.start();
   } else if (params.has("chat-demo") && window.location.hash !== "#client") {
     window.roadlinkDemoChat?.start();

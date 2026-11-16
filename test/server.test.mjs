@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, readdirSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { createServer as createHttpServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -57,11 +59,14 @@ test("serves only public app files with security headers", async () => {
   assert.equal(home.response.status, 200);
   assert.match(home.response.headers.get("content-security-policy") || "", /frame-ancestors 'none'/);
   assert.equal(home.response.headers.get("x-content-type-options"), "nosniff");
-  for (const path of ["/walkthrough.js", "/demo-chat.js"]) {
+  for (const path of ["/walkthrough.js", "/demo-chat.js", "/workspace.js"]) {
     const script = await request(path);
     assert.equal(script.response.status, 200);
     assert.match(script.response.headers.get("content-type"), /javascript/);
   }
+  const workspaceStyles = await request("/workspace.css");
+  assert.equal(workspaceStyles.response.status, 200);
+  assert.match(workspaceStyles.response.headers.get("content-type"), /text\/css/);
 
   for (const path of ["/server.mjs", "/package.json", "/.env.local", "/.data/roadlink-store.json"]) {
     const result = await request(path);
@@ -74,6 +79,14 @@ test("public bootstrap contains readiness flags but no operating records", async
   assert.equal(result.response.status, 200);
   assert.deepEqual(Object.keys(result.json.data).sort(), ["email", "googleSheets", "mode", "operational"]);
   assert.equal(result.json.data.mode, "local-demo");
+});
+
+test("Netlify build includes public assets and excludes backend code and secrets", () => {
+  const root = fileURLToPath(new URL("../", import.meta.url));
+  execFileSync(process.execPath, [join(root, "scripts/build-web.mjs")]);
+  const published = readdirSync(join(root, "dist"));
+  for (const file of ["workspace.js", "workspace.css", "app.js", "walkthrough.js", "demo-chat.js", "assets"]) assert.ok(published.includes(file));
+  for (const file of ["server.mjs", ".env.local", ".data", "supabase", "package.json", "node_modules"]) assert.ok(!published.includes(file));
 });
 
 test("privileged routes reject unauthenticated requests", async () => {

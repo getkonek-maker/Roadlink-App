@@ -30,12 +30,32 @@ header. Opening `/?walkthrough=2` starts the tour automatically.
 The 28-step walkthrough shows the actual app screens with a sample Cebu-to-Leyte
 trip. It covers staff access, booking, client email confirmation, waybills,
 manager/finance approvals, disbursement logging, both cancellation scenarios,
-reconciliation, audit history, the optional client portal, and trip messages. Back/Next and a
-chapter selector support replay; three short questions check the key handoffs.
-Phone users can expand the guide to read longer steps, then choose Show app.
+reconciliation, audit history, the optional client portal, and trip messages.
+Short dialogs appear inside the app beside a highlighted control, with Back,
+Next, and Skip tour. There is no separate instructions panel or phone frame.
 
 Tour records are isolated in browser memory. No emails or server writes occur,
 and exiting restores the original screen, records, role, and session.
+
+## Web And Phone Demo
+
+- Web workspace: `https://roadlink-trip-control.netlify.app/?demo=1`
+- In-app guided tour: `https://roadlink-trip-control.netlify.app/?demo=1&walkthrough=2`
+- Phone layout on a laptop: add `&mobile=1`; actual phones adapt automatically.
+
+The desktop workspace has a sidebar, trip table, waybill approval queue, and
+two-column booking form. Phones show the compact trip list and single-column
+forms. Both use the same app, branding, PWA icon, and operating workflows.
+
+The demo workspace lets presenters switch between coordinator, manager,
+accounting, admin, and client. Bookings, approvals, releases, client responses,
+and reconciliation operate on isolated sample records in browser memory. No
+database writes or emails are sent. Refresh starts fresh; exiting restores any
+prior session. Demo chat still uses sessionStorage for local conversations.
+
+Netlify serves the frontend. Outside demo mode, its `/api/*` proxy points to the
+existing Render backend. Build with `npm run build:web`; only explicitly listed
+public files and assets enter `dist/`. Secrets and backend source are excluded.
 
 ### Trip Chat Demo
 

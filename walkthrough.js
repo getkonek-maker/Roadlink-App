@@ -1,8 +1,7 @@
 (() => {
-  const chapters = ["Get oriented", "Book a trip", "Approve & release", "Handle a cancellation", "Client portal", "Trip messages", "Your quick recap"];
   const steps = [
     {
-      chapter: 0, screen: "home", title: "Follow one trip from start to finish",
+      chapter: 0, screen: "dashboard", target: ".status-grid", title: "Welcome to Roadlink Trip Control",
       body: "Roadlink keeps a booking, its waybill, and its released funds together. We'll follow Mika's Cebu-to-Leyte trip and see what each person does.",
       action: "Use Next to move through the sample screens. Back lets you revisit anything.",
       outcome: "By the end, you'll know how to book, approve, release, handle a cancellation, and check the records.", next: "Show me how"
@@ -180,11 +179,40 @@
   let snapshot;
   let previousFocus;
   let previousScroll = 0;
-  let answers = new Map();
   let host;
   let observer;
   let lastFocus;
   const app = () => document.querySelector("#app");
+  const tips = [
+    "Follow one Cebu-to-Leyte booking through confirmation, approvals, cash release, and cancellation. These are sample records. At the end, you can explore the demo yourself.",
+    "Choose your assigned role, then enter your email or username and password. Coordinators prepare bookings, managers approve, and accounting records the money. This tour switches roles for you.",
+    "New staff choose Create account request and enter their name, email, and requested role. Access is granted only after an owner or admin reviews the request.",
+    "Owners and admins open Users & access. Review each request, then Approve or Decline. Approval issues temporary credentials for that person's own account.",
+    "This is the trips workspace. Use the status filters to find a booking, or choose New trip. Open trip brings together its client, waybill, releases, and history.",
+    "Enter the company and the person authorized to confirm or cancel. Their email receives the confirmation; phone, WhatsApp, and Viber support follow-up. The sample values here belong only to this tour.",
+    "Choose From, To, vehicle type, plate number, and date, then add cargo notes. Create trip sends the confirmation in the connected app. These details carry into the waybill.",
+    "The client receives this branded email with route, date, vehicle, and three choices: confirm, cancel, or contact Roadlink. The secure review link works without an app or account.",
+    "The client checks the details and selects Confirm Booking. Opening the email alone does not confirm the trip. Contact Roadlink asks the coordinator to follow up.",
+    "Confirmed means the client accepted the booking. Money has not been released yet. Next, the coordinator opens the waybill and prepares the proposed costs.",
+    "Trip details are already filled in. Complete the driver, rates, and expense amounts. On a phone, swipe across the paper to inspect the remaining columns. These are proposed costs, not released funds.",
+    "Save and submit sends the waybill to the manager's approval queue. The coordinator prepares it; the manager and finance approve with their own accounts. You can also print or email the waybill.",
+    "The manager reviews the submitted waybill and chooses Approve (Manager). Their identity is recorded, and accounting is notified to perform the finance review.",
+    "Accounting reviews the same waybill and chooses Approve (Finance). Both approvals plus client confirmation must be recorded before a release can be logged.",
+    "Accounting chooses the release type, amount, and purpose or reference. Save one entry per cash, cheque, or PO release. The app records what was disbursed; it does not transfer money.",
+    "This sample now has PHP 15,000 cash, a PHP 42,000 cheque, and a PHP 18,000 PO: PHP 75,000 total. Each release stays attached to the trip, ready for checking if it is cancelled.",
+    "If the client cancels before any release, the trip becomes Cancelled. The reason stays in its history, and there are no released funds to recover. Now let's see the funded case.",
+    "The client chooses Cancel Booking, enters a reason, and submits. Here the shipment was postponed after money was released. A chat message or contact request alone does not cancel the booking.",
+    "The status becomes Cancelled - Funds Released, with For immediate checking. Management sees the exposure, and accounting checks the actual cash, cheque, and PO. Cancellation never returns money automatically.",
+    "Accounting records whether cash was returned, the cheque was voided, and the PO was cancelled, plus any used expenses. Complete checking only when every release is resolved.",
+    "Open Audit timeline to see who booked, confirmed, approved, released, cancelled, and reconciled. Completing reconciliation removes the urgent task while preserving the full record.",
+    "Clients may use the optional portal to see their own bookings and requests. They cannot see Roadlink's budgets, staff audit history, or accounting controls. Email confirmation links are still available.",
+    "Request new booking collects the route, truck, date, cargo, and contact. It creates a request for staff review, not an official trip. The coordinator still checks availability.",
+    "Client booking requests appear here. Review availability and contact the client before selecting a request to convert it into an official trip. It then follows the same confirmation and approval process.",
+    "Trip messages keeps questions and replies with the booking. Staff open it from Trip Detail; clients open it from Booking Detail. The current conversation is a demo kept in this browser tab.",
+    "The coordinator reads the client's loading question and sends a reply. In the hands-on demo, switch between Roadlink staff and Client to try both sides. Unread badges and read status update as you switch.",
+    "The client replies in the same conversation without seeing internal costs. Use Try the chat demo to write a message. Confirmation and cancellation still use their booking buttons.",
+    "You're ready to explore. Create bookings as coordinator, switch to Manager for approval, then Accounting for releases and checking. The top demo selector changes roles. Reopen this tour with the ? button."
+  ];
 
   function sampleTrip(step) {
     const stage = step.stage || 0;
@@ -238,14 +266,6 @@
     const target = step.target ? app().querySelector(step.target) : null;
     if (target) target.classList.add("tour-focus");
     app().scrollTop = 0;
-    requestAnimationFrame(() => {
-      if (!active) return;
-      if (target) {
-        const offset = target.getBoundingClientRect().top - app().getBoundingClientRect().top;
-        const topbarHeight = app().querySelector(".topbar")?.getBoundingClientRect().height || 0;
-        app().scrollTop = Math.max(0, offset - topbarHeight - 18);
-      }
-    });
   }
 
   function fillForm(kind, trip) {
@@ -284,28 +304,17 @@
 
   function showStep() {
     const step = steps[index];
-    const answer = answers.get(index);
-    const passed = !step.check || answer === step.check.correct;
     host.innerHTML = `
+      <div class="tour-blocker"></div><div class="tour-spotlight" aria-hidden="true"></div>
       <div class="tour-dialog" role="dialog" aria-modal="true" aria-labelledby="tourTitle" aria-describedby="tourBody">
-        <header class="tour-header"><span>Roadlink guided tour</span><div class="tour-header-actions"><button type="button" class="tour-expand" data-tour="expand" aria-expanded="${document.body.classList.contains("tour-expanded")}">${document.body.classList.contains("tour-expanded") ? "Show app" : "Expand guide"}</button><button type="button" class="tour-close" data-tour="close" aria-label="Exit guided tour" title="Exit guided tour">&times;</button></div></header>
-        <div class="tour-progress"><progress max="${steps.length}" value="${index + 1}" aria-label="Tour progress"></progress><span>Step ${index + 1} of ${steps.length}</span></div>
+        <header class="tour-compact-header"><span>${index + 1} OF ${steps.length} · ${step.role === "client" ? "CLIENT" : step.role === "owner" ? "MANAGER" : step.role === "accounting" ? "ACCOUNTING" : "ROADLINK"}</span><button type="button" class="tour-skip" data-tour="close">Skip tour</button></header>
         <div class="tour-content">
-          <div class="tour-context"><label for="tourChapter" class="tour-sr-only">Jump to chapter</label><select id="tourChapter">${chapters.map((chapter, i) => `<option value="${i}" ${i === step.chapter ? "selected" : ""}>${i + 1}. ${chapter}</option>`).join("")}</select><span class="tour-role">${step.role === "client" ? "Client view" : step.role === "owner" ? "Manager view" : step.role === "accounting" ? "Accounting view" : index === 0 ? "Overview" : "Coordinator view"}</span></div>
-          <h2 id="tourTitle" tabindex="-1">${step.title}</h2><p id="tourBody">${step.body}</p>
-          <div class="tour-instruction"><strong>What you do</strong><p>${step.action}</p></div>
-          <div class="tour-outcome"><strong>What happens next</strong><p>${step.outcome}</p></div>
+          <h2 id="tourTitle" tabindex="-1">${step.title}</h2><p id="tourBody" class="tour-copy">${tips[index]}</p>
           ${step.tryChat ? `<button class="secondary tour-try-chat" type="button" data-tour="chat">Try the chat demo</button>` : ""}
-          ${step.check ? `<fieldset class="tour-check"><legend>${step.check.question}</legend>${step.check.options.map((option, choice) => `<button type="button" data-tour-answer="${choice}" aria-pressed="${answer === choice}" class="${answer === choice ? (passed ? "is-correct" : "is-incorrect") : ""}">${option}</button>`).join("")}<p class="tour-feedback" role="status">${answer === undefined ? "Choose an answer to continue." : passed ? step.check.explanation : "Try again. Think about who verifies the approval or the actual money."}</p></fieldset>` : ""}
         </div>
-        <footer class="tour-footer"><button type="button" class="ghost" data-tour="back" ${index === 0 ? "disabled" : ""}>Back</button><button type="button" class="primary" data-tour="next" ${!passed ? "disabled" : ""}>${step.next || "Next"} <span aria-hidden="true">${index === steps.length - 1 ? "" : "&rarr;"}</span></button></footer>
-        <p class="tour-sample-note">Sample screens only. No emails sent or saved records changed.</p>
+        <footer class="tour-footer"><button type="button" class="ghost" data-tour="back" ${index === 0 ? "disabled" : ""}>Back</button><button type="button" class="primary" data-tour="next">${index === steps.length - 1 ? "Explore the app" : "Next"}</button></footer>
       </div>`;
     applyScene(step);
-    host.querySelector("#tourChapter").addEventListener("change", (event) => {
-      index = steps.findIndex((step) => step.chapter === Number(event.target.value));
-      showStep();
-    });
     host.querySelectorAll("[data-tour]").forEach((button) => button.addEventListener("click", () => {
       if (button.dataset.tour === "close") close();
       else if (button.dataset.tour === "chat") {
@@ -313,24 +322,57 @@
         close();
         window.roadlinkDemoChat.start(trip, step.role === "client" ? "client" : "staff");
       }
-      else if (button.dataset.tour === "expand") {
-        const expanded = document.body.classList.toggle("tour-expanded");
-        button.textContent = expanded ? "Show app" : "Expand guide";
-        button.setAttribute("aria-expanded", String(expanded));
-      }
       else if (button.dataset.tour === "back" && index > 0) { index--; showStep(); }
-      else if (button.dataset.tour === "next" && passed) {
+      else if (button.dataset.tour === "next") {
         if (index === steps.length - 1) close();
         else { index++; showStep(); }
       }
     }));
-    host.querySelectorAll("[data-tour-answer]").forEach((button) => button.addEventListener("click", () => {
-      const choice = Number(button.dataset.tourAnswer);
-      answers.set(index, choice);
-      showStep();
-      host.querySelector(`[data-tour-answer="${choice}"]`).focus({ preventScroll: true });
-    }));
     host.querySelector("#tourTitle").focus({ preventScroll: true });
+    requestAnimationFrame(() => positionDialog(true));
+  }
+
+  function positionDialog(scroll = false) {
+    if (!active || !host) return;
+    const step = steps[index];
+    const frame = document.querySelector("#phoneFrame");
+    const bounds = frame.getBoundingClientRect();
+    const dialog = host.querySelector(".tour-dialog");
+    const overrides = { home: ".home-logo", accountRequest: "#requestEmail", newTrip: index === 6 ? "#origin" : "#client" };
+    let target = app().querySelector(overrides[step.screen] || step.target || ".topbar h2");
+    if (step.target === ".waybill-paper") target = app().querySelector(".waybill-heading");
+    if (step.preview === "email") target = app().querySelector(".tour-mail-body h2");
+    if (step.preview?.startsWith("chat")) target = app().querySelector(".chat-view-tabs");
+    if (step.preview === "recap") target = app().querySelector(".tour-recap h2");
+    if (target && scroll) {
+      const rect = target.getBoundingClientRect();
+      const bar = app().querySelector(".topbar")?.getBoundingClientRect().height || 0;
+      app().scrollTop += rect.top - app().getBoundingClientRect().top - bar - 45;
+    }
+    const card = dialog.getBoundingClientRect();
+    const margin = 16;
+    const clamp = (value, min, max) => Math.max(min, Math.min(value, Math.max(min, max)));
+    let highlight = { x: bounds.width / 2 - 60, y: 44, width: 120, height: 38 };
+    if (target && target.getClientRects().length) {
+      const rect = target.getBoundingClientRect();
+      highlight = {
+        x: clamp(rect.left - bounds.left - 6, 8, bounds.width - 24),
+        y: clamp(rect.top - bounds.top - 6, 8, bounds.height - 60),
+        width: Math.min(rect.width + 12, bounds.width - 24),
+        height: Math.min(rect.height + 12, Math.max(40, bounds.height - card.height - 90))
+      };
+    }
+    highlight.width = Math.min(highlight.width, bounds.width - highlight.x - 8);
+    const spot = host.querySelector(".tour-spotlight");
+    Object.assign(spot.style, { left: `${highlight.x}px`, top: `${highlight.y}px`, width: `${highlight.width}px`, height: `${highlight.height}px` });
+    let x = highlight.x;
+    let y = highlight.y + highlight.height + 14;
+    if (bounds.width > 800 && highlight.x + highlight.width + card.width + 32 < bounds.width) {
+      x = highlight.x + highlight.width + 16; y = highlight.y;
+    } else if (y + card.height > bounds.height - margin && highlight.y > card.height + margin) {
+      y = highlight.y - card.height - 14;
+    }
+    Object.assign(dialog.style, { left: `${clamp(x, margin, bounds.width - card.width - margin)}px`, top: `${clamp(y, margin, bounds.height - card.height - margin)}px` });
   }
 
   function trapFocus(event) {
@@ -354,20 +396,19 @@
     lastFocus = previousFocus?.getAttribute("data-action");
     previousScroll = app().scrollTop;
     window.clearTimeout(setToast.timer);
-    answers = new Map();
     index = 0;
     active = true;
     document.body.classList.add("tour-active");
     app().inert = true;
     app().setAttribute("aria-hidden", "true");
-    document.querySelector(".device-toolbar").inert = true;
+    document.querySelector("#workspaceNav").inert = true;
     host = document.createElement("div");
     host.className = "walkthrough-host";
-    document.querySelector(".shell").append(host);
-    observer = new ResizeObserver(() => {
-      document.querySelector(".shell").style.setProperty("--tour-panel-height", `${Math.ceil(host.getBoundingClientRect().height)}px`);
-    });
-    observer.observe(host);
+    document.querySelector("#phoneFrame").append(host);
+    observer = new ResizeObserver(() => positionDialog());
+    observer.observe(document.querySelector("#phoneFrame"));
+    window.addEventListener("resize", positionAfterResize);
+    app().addEventListener("scroll", positionAfterResize);
     document.addEventListener("keydown", trapFocus);
     showStep();
   }
@@ -376,13 +417,15 @@
     if (!active) return;
     active = false;
     observer.disconnect();
+    window.removeEventListener("resize", positionAfterResize);
+    app().removeEventListener("scroll", positionAfterResize);
     document.removeEventListener("keydown", trapFocus);
     host.remove();
     document.body.classList.remove("tour-active", "tour-expanded");
     document.querySelector(".shell").style.removeProperty("--tour-panel-height");
     app().inert = false;
     app().removeAttribute("aria-hidden");
-    document.querySelector(".device-toolbar").inert = false;
+    document.querySelector("#workspaceNav").inert = false;
     Object.keys(state).forEach((key) => { if (!Object.hasOwn(snapshot, key)) delete state[key]; });
     Object.assign(state, snapshot);
     render();
@@ -395,4 +438,5 @@
   }
 
   window.roadlinkWalkthrough = { get active() { return active; }, start, close };
+  function positionAfterResize() { positionDialog(); }
 })();

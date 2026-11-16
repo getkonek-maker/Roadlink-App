@@ -5,6 +5,8 @@
 - Repository: `https://github.com/getkonek-maker/Roadlink-App`
 - Branch deployed by Render: `main`
 - Render URL: `https://roadlink-app.onrender.com`
+- Netlify frontend: `https://roadlink-trip-control.netlify.app`
+- Netlify site ID: `ad830280-7bad-451a-8374-ea9b7d5e6f2e`
 - Current hardening branch: `codex/live-operations-hardening`
 - Baseline hardening commit before walkthrough/chat work: `b4fb056`
 - Runtime: Node.js server plus vanilla JavaScript PWA
@@ -12,15 +14,22 @@
 - Email: Resend
 - Management mirror: Google Sheets through Apps Script
 
-## Walkthrough And Chat Demo Release
+## Responsive Web Demo Release
 
-- Public guided walkthrough: `https://roadlink-app.onrender.com/?walkthrough=2`
+- Public guided walkthrough: `https://roadlink-trip-control.netlify.app/?demo=1&walkthrough=2`
+- Desktop workspace: `https://roadlink-trip-control.netlify.app/?demo=1`
+- Phone demo on a laptop: add `&mobile=1`. Actual phones adapt automatically.
 - Public hands-on chat preview: `https://roadlink-app.onrender.com/?chat-demo=1`
 - Both routes work without creating a staff/client account. They use isolated
   sample data and preserve any signed-in session on exit.
-- Asset/cache release marker: `walkthrough-chat-v11`; PWA cache version 11.
-- Verified all 28 walkthrough dialogs, three comprehension checks, back/chapter
-  navigation, state restoration, and desktop/phone/landscape layouts.
+- Asset/cache release marker: `web-app-v12`; PWA cache version 12.
+- The tour now uses small in-app spotlight dialogs, not a separate side panel.
+  Back, Next, Skip, focus management, responsive positioning, and restoration
+  cover all 28 steps on desktop, phone, and landscape.
+- Desktop navigation, trip table, waybill approval queue, two-column booking
+  forms, role switching, and compact phone layout share the same application.
+- `?demo=1` runs the entire booking/approval/release/cancellation/reconciliation
+  workflow on isolated sample records. Demo mode never calls the real API.
 - Verified chat replies in both directions, unread and local read states,
   draft preservation, refresh persistence, per-trip isolation, text escaping,
   reset, and the tour-to-chat handoff. Neither demo sends API mutations.
@@ -33,6 +42,10 @@
 - `server.mjs`: static server, API, authentication, authorization, email, and
   database adapter.
 - `app.js`: staff and client PWA interface.
+- `workspace.js` / `workspace.css`: responsive workspace navigation, demo role
+  selection, presentation records, and simulated API responses. No real writes.
+- `netlify.toml`: frontend publishing and same-origin `/api/*` proxy to Render.
+- `scripts/build-web.mjs`: explicit public-file build into ignored `dist/`.
 - `walkthrough.js`: isolated 28-step guided tour, launched from home/login,
   header help, or `?walkthrough=2`. It reuses real screens, restores application
   state on exit, and prevents all API calls while active. No server writes.
@@ -51,6 +64,15 @@
 - `google-apps-script/sheets-webhook.gs`: read-only Sheets mirror receiver.
 - `test/server.test.mjs`: API security and complete workflow tests.
 - `LIVE_OPERATIONS_CHECKLIST.md`: deployment and go-live gate.
+
+## Publish The Frontend
+
+Run `npm run verify` and `npm run build:web`, then deploy `dist/` to Netlify site
+`ad830280-7bad-451a-8374-ea9b7d5e6f2e` using the CLI's existing login. Netlify is
+currently deployed manually; a GitHub push alone updates Render, not Netlify.
+Only publish `dist/`, never the project root. Preserve the site's identity and
+the existing Render backend. The baseline before this responsive pass was
+commit `2905d7d` on `codex/live-operations-hardening` and `main`.
 
 ## Security Model
 

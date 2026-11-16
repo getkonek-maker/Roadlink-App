@@ -2,15 +2,29 @@
 
 ## Learn In The App
 
-Open `/?walkthrough=2` or choose **Take a guided tour**. The guided dialogs
+Open `/?demo=1&walkthrough=2` or choose **Take a guided tour**. The guided dialogs
 explain who performs each action, what to choose, and its result using one
-sample trip. Follow all seven chapters for the complete workflow, or select a
-chapter to revisit it. **Back**, **Next**, and **Exit guided tour** remain
-available; **Expand guide** improves reading on phones.
+sample trip. Each short dialog appears inside the app and highlights the
+relevant control. Use **Back**, **Next**, or **Skip tour**. Finish returns to an
+explorable sample workspace rather than a presentation panel.
 
 The tour switches sample roles automatically and never changes saved records
 or sends an email. Finish returns to the starting screen. The **?** in screen
 headers reopens it. GPS tracking and invoices are identified as future work.
+
+## Demo On A Laptop Or Phone
+
+Open `https://roadlink-trip-control.netlify.app/?demo=1` for the full desktop
+workspace. Use the View as selector to change roles and follow the same trip
+through each approval. Phone view narrows the layout for laptop presentations;
+actual phones use their own full screen automatically. Desktop view returns to
+the table and sidebar.
+
+Start a new sample booking as coordinator; open the client confirmation preview
+to confirm it, then submit the waybill. Switch to Owner / Manager and approve,
+then Accounting for finance approval and release logging. A funded cancellation
+opens checking. Record the release outcomes, then complete reconciliation.
+All these actions remain in the browser demo and send no real emails.
 
 ## Trip Messages Preview
 

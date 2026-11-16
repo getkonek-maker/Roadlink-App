@@ -9,56 +9,24 @@
     <link rel="manifest" href="manifest.webmanifest">
     <link rel="icon" href="assets/pwa-icon.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="assets/pwa-icon-192.png">
-    <meta name="roadlink-release" content="walkthrough-chat-v11">
-    <link rel="stylesheet" href="styles.css?v=11">
+    <meta name="roadlink-release" content="web-app-v12">
+    <link rel="stylesheet" href="styles.css?v=12">
+    <link rel="stylesheet" href="workspace.css?v=12">
   </head>
   <body>
-    <main class="shell">
-      <section class="device-panel" aria-label="Device preview">
-        <div class="device-toolbar" aria-label="Preview options">
-          <button class="device-choice is-active" type="button" data-device="ios">iPhone</button>
-          <button class="device-choice" type="button" data-device="android">Android</button>
-        </div>
-
-        <div class="phone-frame ios" id="phoneFrame">
-          <div class="phone-status">
-            <span id="statusTime">9:41</span>
-            <span>Roadlink LTE</span>
-          </div>
-
+    <main class="shell workspace-shell">
+      <aside class="workspace-nav" id="workspaceNav" aria-label="Main navigation"></aside>
+      <section class="device-panel" aria-label="Roadlink workspace">
+        <div class="phone-frame" id="phoneFrame">
+          <div id="demoToolbar" class="workspace-demo-bar" hidden></div>
           <div class="app" id="app" aria-live="polite"></div>
         </div>
       </section>
-
-      <aside class="demo-notes" aria-label="Prototype notes">
-        <div>
-          <img class="brand-logo large" src="assets/roadlink-logo.svg" alt="Roadlink Cargo Transport Service">
-          <p class="eyebrow">Roadlink Demo</p>
-          <h1>Trip status, cancellation proof, and fund accountability in one phone flow.</h1>
-          <p>
-            Staff use the app. Clients only receive a secure link through their preferred channel.
-          </p>
-        </div>
-
-        <div class="note-grid">
-          <article>
-            <strong>Client friction stays low</strong>
-            <span>Clients can respond by secure link or use the optional portal.</span>
-          </article>
-          <article>
-            <strong>Funded cancellations stand out</strong>
-            <span>Owner and accounting see the risk immediately.</span>
-          </article>
-          <article>
-            <strong>Every action leaves a trail</strong>
-            <span>Status changes, releases, and reconciliation are visible.</span>
-          </article>
-        </div>
-      </aside>
     </main>
 
-    <script src="app.js?v=11"></script>
-    <script src="demo-chat.js?v=11"></script>
-    <script src="walkthrough.js?v=11"></script>
+    <script src="app.js?v=12"></script>
+    <script src="workspace.js?v=12"></script>
+    <script src="demo-chat.js?v=12"></script>
+    <script src="walkthrough.js?v=12"></script>
   </body>
 </html>
