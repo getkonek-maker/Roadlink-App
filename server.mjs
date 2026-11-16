@@ -32,6 +32,8 @@ const publicFiles = new Set([
   "/index.html",
   "/styles.css",
   "/app.js",
+  "/walkthrough.js",
+  "/demo-chat.js",
   "/manifest.webmanifest",
   "/sw.js"
 ]);

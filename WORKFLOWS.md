@@ -1,5 +1,31 @@
 # Roadlink Trip Control Workflows
 
+## Learn In The App
+
+Open `/?walkthrough=2` or choose **Take a guided tour**. The guided dialogs
+explain who performs each action, what to choose, and its result using one
+sample trip. Follow all seven chapters for the complete workflow, or select a
+chapter to revisit it. **Back**, **Next**, and **Exit guided tour** remain
+available; **Expand guide** improves reading on phones.
+
+The tour switches sample roles automatically and never changes saved records
+or sends an email. Finish returns to the starting screen. The **?** in screen
+headers reopens it. GPS tracking and invoices are identified as future work.
+
+## Trip Messages Preview
+
+1. Open `/?chat-demo=1`, choose Trip messages in a trip, or select Try the chat
+   demo in the walkthrough's Trip messages chapter.
+2. Select Roadlink staff, write a message or choose a suggested reply, and Send.
+3. Select Client to read the message and reply; the other view shows an unread
+   badge until opened. Read indicators refer only to this local demo.
+4. Choose Reset demo to restore the sample conversation, or the back arrow to
+   exit to the original screen.
+
+Messages stay in the current browser tab and are separate for each trip. No
+external client receives the messages. Confirmations, cancellations, approvals,
+and money movements must still use their normal booking controls.
+
 ## Production Pilot Status
 
 The app now has server-backed production pilot hooks. Supabase is the operational source of truth when configured; otherwise the app runs in local demo mode with `.data/roadlink-store.json`. Google Sheets mirroring is supported through `GOOGLE_SHEETS_WEBHOOK_URL`.

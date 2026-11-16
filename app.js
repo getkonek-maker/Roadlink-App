@@ -327,6 +327,9 @@ function hasSignedInProfile() {
 }
 
 async function apiRequest(path, options = {}) {
+  if (window.roadlinkWalkthrough?.active || window.roadlinkDemoChat?.active) {
+    throw new Error("Exit the demo before working with saved records.");
+  }
   const token = sessionToken();
   const response = await fetch(path, {
     ...options,
@@ -527,7 +530,8 @@ function render() {
     reconcile: renderReconcile,
     audit: renderAudit,
     waybill: renderWaybill,
-    users: renderUsers
+    users: renderUsers,
+    chat: () => window.roadlinkDemoChat.render()
   };
 
   app.innerHTML = (views[state.screen] || renderLogin)();
@@ -544,7 +548,7 @@ function topbar(title, right = "") {
     <header class="topbar">
       ${back}
       <h2>${title === "Roadlink" ? `<img class="topbar-logo" src="assets/roadlink-logo.svg" alt="Roadlink">` : title}</h2>
-      ${right || `<span></span>`}
+      <div class="topbar-tools">${right}<button class="tour-help" type="button" data-action="startWalkthrough" aria-label="Open guided walkthrough" title="Guided walkthrough">?</button></div>
     </header>
   `;
 }
@@ -559,6 +563,7 @@ function renderHome() {
         <div class="home-actions">
           <button class="primary wide home-login" type="button" data-action="login">Staff log in</button>
           <button class="ghost wide home-client-login" type="button" data-action="clientLogin">${state.dataMode === "supabase" ? "Client portal" : "Client portal preview"}</button>
+          <button class="home-tour-link" type="button" data-action="startWalkthrough">Take a guided tour</button>
           <span>${state.operationalReady ? "Live Operations" : (state.dataMode === "supabase" ? "Production Pilot" : "Demo Mode")}</span>
         </div>
       </div>
@@ -606,6 +611,7 @@ function renderLogin() {
 
         <button class="ghost wide" type="button" data-action="forgotPassword">Forgot password?</button>
         <button class="ghost wide" type="button" data-action="accountRequest">Create account request</button>
+        <button class="ghost wide" type="button" data-action="startWalkthrough">Take a guided tour</button>
 
         ${state.dataMode === "supabase" ? "" : `<div class="login-hint">
           <strong>Demo credentials</strong>
@@ -856,6 +862,7 @@ function renderClientBookingDetail() {
             </div>
           ` : ""}
           <button class="ghost" type="button" data-call-roadlink="${trip.id}">Contact Roadlink</button>
+          <button class="secondary" type="button" data-action="chatClient">Trip messages <span class="chat-inline-badge">Demo</span></button>
         </article>
       </div>
       ${state.toast ? `<div class="toast">${state.toast}</div>` : ""}
@@ -1148,6 +1155,7 @@ function renderDetail() {
         </div>
       </div>
       <div class="content">
+        <button class="secondary chat-entry" type="button" data-action="chatStaff">Trip messages <span class="chat-inline-badge">Demo</span></button>
         <article class="card">
           <strong>Client confirmation email</strong>
           <span>${trip.contact} receives a branded Roadlink email at ${trip.email}. Clients can confirm, cancel, or contact Roadlink from the email link.</span>
@@ -1623,6 +1631,8 @@ function renderUsers() {
 }
 
 function bindScreenEvents() {
+  if (window.roadlinkWalkthrough?.active) return;
+  if (window.roadlinkDemoChat?.active) { window.roadlinkDemoChat.bind(); return; }
   const waybillForm = document.querySelector("#waybillForm[data-readonly='true']");
   if (waybillForm) {
     waybillForm.querySelectorAll("input, textarea, select").forEach((control) => { control.disabled = true; });
@@ -1813,6 +1823,9 @@ function handleAction(action) {
   const trip = selectedTrip();
   const previous = state.screen;
   const routes = {
+    startWalkthrough: () => window.roadlinkWalkthrough?.start(),
+    chatStaff: () => window.roadlinkDemoChat?.start(trip),
+    chatClient: () => window.roadlinkDemoChat?.start(trip, "client"),
     back: () => {
       state.screen = previous === "client" ? "detail" : (previous === "login" || previous === "accountRequest" ? "home" : "dashboard");
       render();
@@ -2514,6 +2527,11 @@ async function initApp() {
     if (clientIntent === "contact") state.toast = "Tap Contact Roadlink to notify the coordinator.";
   }
   render();
+  if (params.has("walkthrough") && window.location.hash !== "#client") {
+    window.roadlinkWalkthrough?.start();
+  } else if (params.has("chat-demo") && window.location.hash !== "#client") {
+    window.roadlinkDemoChat?.start();
+  }
 }
 
 document.addEventListener("DOMContentLoaded", initApp);

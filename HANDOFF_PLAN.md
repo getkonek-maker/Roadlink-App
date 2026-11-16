@@ -6,17 +6,42 @@
 - Branch deployed by Render: `main`
 - Render URL: `https://roadlink-app.onrender.com`
 - Current hardening branch: `codex/live-operations-hardening`
-- Last pushed hardening commit before this pass: `d9e7a48`
+- Baseline hardening commit before walkthrough/chat work: `b4fb056`
 - Runtime: Node.js server plus vanilla JavaScript PWA
 - Database: Supabase through server-side PostgREST
 - Email: Resend
 - Management mirror: Google Sheets through Apps Script
+
+## Walkthrough And Chat Demo Release
+
+- Public guided walkthrough: `https://roadlink-app.onrender.com/?walkthrough=2`
+- Public hands-on chat preview: `https://roadlink-app.onrender.com/?chat-demo=1`
+- Both routes work without creating a staff/client account. They use isolated
+  sample data and preserve any signed-in session on exit.
+- Asset/cache release marker: `walkthrough-chat-v11`; PWA cache version 11.
+- Verified all 28 walkthrough dialogs, three comprehension checks, back/chapter
+  navigation, state restoration, and desktop/phone/landscape layouts.
+- Verified chat replies in both directions, unread and local read states,
+  draft preservation, refresh persistence, per-trip isolation, text escaping,
+  reset, and the tour-to-chat handoff. Neither demo sends API mutations.
+- This chat release is a presentation preview. Shared live messaging still
+  requires authorized server storage, delivery, read receipts, and notification
+  infrastructure. It does not require replacing the demo UI.
 
 ## Current Architecture
 
 - `server.mjs`: static server, API, authentication, authorization, email, and
   database adapter.
 - `app.js`: staff and client PWA interface.
+- `walkthrough.js`: isolated 28-step guided tour, launched from home/login,
+  header help, or `?walkthrough=2`. It reuses real screens, restores application
+  state on exit, and prevents all API calls while active. No server writes.
+- `demo-chat.js`: per-trip messaging preview, launched by `?chat-demo=1`, Trip
+  messages buttons, or the tour. Switches staff/client perspective, tracks local
+  unread/read states, and stores messages in sessionStorage only. No live chat
+  API, external notifications, or shared database messages yet. Never represent
+  this preview as live communication. The active demo blocks API requests and
+  restores prior application state on exit.
 - `supabase/migrations/0001_init.sql`: pilot schema.
 - `supabase/migrations/0002_live_integrity.sql`: required live-integrity update.
 - `supabase/migrations/0003_atomic_operations.sql`: atomic cancellation,

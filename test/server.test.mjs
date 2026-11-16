@@ -57,6 +57,11 @@ test("serves only public app files with security headers", async () => {
   assert.equal(home.response.status, 200);
   assert.match(home.response.headers.get("content-security-policy") || "", /frame-ancestors 'none'/);
   assert.equal(home.response.headers.get("x-content-type-options"), "nosniff");
+  for (const path of ["/walkthrough.js", "/demo-chat.js"]) {
+    const script = await request(path);
+    assert.equal(script.response.status, 200);
+    assert.match(script.response.headers.get("content-type"), /javascript/);
+  }
 
   for (const path of ["/server.mjs", "/package.json", "/.env.local", "/.data/roadlink-store.json"]) {
     const result = await request(path);

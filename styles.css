@@ -289,7 +289,7 @@ button {
   top: 0;
   z-index: 4;
   display: grid;
-  grid-template-columns: 44px 1fr 58px;
+  grid-template-columns: 36px minmax(0, 1fr) auto;
   align-items: center;
   gap: 8px;
   min-height: 74px;
@@ -505,6 +505,7 @@ button {
 
 .section-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: end;
   justify-content: space-between;
   gap: 12px;
@@ -576,13 +577,14 @@ button {
 
 .trip-row {
   display: grid;
-  grid-template-columns: 46px 1fr;
+  grid-template-columns: 46px minmax(0, 1fr);
   gap: 14px;
   align-items: start;
 }
 
 .trip-title {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
   justify-content: space-between;
   gap: 8px;
@@ -1272,6 +1274,7 @@ button {
 .topbar-logo {
   display: block;
   width: 186px;
+  max-width: 100%;
   height: auto;
   margin: 0 auto;
 }
@@ -1501,6 +1504,614 @@ button {
     width: calc(100vw - 20px);
     min-height: 650px;
   }
+}
+
+.chat-entry {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.chat-inline-badge,
+.chat-demo-badge {
+  padding: 3px 7px;
+  border: 1px solid #ced9e5;
+  border-radius: 4px;
+  color: #516575;
+  background: #f1f6fa;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.chat-demo-active .app {
+  overflow: hidden;
+}
+
+.chat-screen {
+  height: 100%;
+  min-height: 0;
+  background: #f4f7fa;
+}
+
+.chat-topbar {
+  flex: 0 0 auto;
+  min-height: 56px;
+  padding-block: 8px;
+  background: white;
+}
+
+.chat-trip-context {
+  display: grid;
+  gap: 3px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--line);
+  background: white;
+  overflow-wrap: anywhere;
+}
+
+.chat-trip-context > span { color: var(--muted); font-size: 10px; }
+.chat-trip-context strong { color: var(--brand-strong); font-size: 15px; }
+.chat-trip-context small { color: var(--muted); font-size: 11px; }
+
+.chat-demo-controls {
+  flex: 0 0 auto;
+  padding: 8px 14px 10px;
+  border-bottom: 1px solid var(--line);
+  background: white;
+}
+
+.chat-demo-controls > p {
+  margin: 0 0 8px;
+  color: #67727b;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.chat-view-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  padding: 3px;
+  border-radius: 5px;
+  background: #eef2f7;
+}
+
+.chat-view-tabs button {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: #626b77;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.chat-view-tabs [aria-selected="true"] {
+  border-color: #d3ddeb;
+  color: var(--brand-strong);
+  background: white;
+}
+
+.chat-unread {
+  display: grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  padding-inline: 4px;
+  border-radius: 50%;
+  color: white;
+  background: #ba2a35;
+  font-size: 11px;
+}
+
+.chat-thread {
+  flex: 1 1 0;
+  min-height: 0;
+  padding: 12px 14px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.chat-day {
+  margin: 0 0 14px;
+  text-align: center;
+  color: #74808d;
+  font-size: 11px;
+}
+
+.chat-thread [role="log"] {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.chat-message {
+  max-width: 88%;
+  padding: 10px 12px;
+  border: 1px solid #dce3eb;
+  border-radius: 7px;
+  background: white;
+  overflow-wrap: anywhere;
+}
+
+.chat-message.incoming { align-self: flex-start; }
+.chat-message.outgoing { align-self: flex-end; background: #e9f4ef; border-color: #c8dfd5; }
+.chat-sender { color: #456455; font-size: 11px; font-weight: 650; }
+.chat-message.incoming .chat-sender { color: #526a87; }
+.chat-message > p { margin: 5px 0 8px; color: #20332d; font-size: 14px; line-height: 1.5; white-space: pre-wrap; }
+.chat-message-meta { display: flex; justify-content: flex-end; gap: 8px; color: #65746e; font-size: 10px; }
+
+.chat-composer-area {
+  flex: 0 0 auto;
+  padding: 10px 14px max(10px, env(safe-area-inset-bottom));
+  border-top: 1px solid var(--line);
+  background: white;
+}
+
+.chat-sending-as { margin: 0 0 7px; font-size: 11px; color: #5e6875; }
+.chat-suggestions { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 8px; }
+.chat-suggestions button { flex: 0 0 auto; min-height: 32px; padding: 5px 9px; border: 1px solid #d5dfeb; border-radius: 5px; background: #f5f8fc; color: #45607e; font-size: 11px; }
+.chat-composer { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 8px; }
+.chat-composer textarea { display: block; width: 100%; min-height: 48px; max-height: 88px; resize: none; padding: 10px; border: 1px solid #c4d1e1; border-radius: 5px; color: var(--ink); background: white; font-size: 14px; line-height: 1.4; }
+.chat-composer button { min-height: 48px; border-radius: 5px; font-size: 13px; }
+.chat-composer button:disabled { opacity: 0.45; cursor: default; }
+.chat-feedback { margin: 6px 0 0; color: #4b695d; font-size: 11px; line-height: 1.4; }
+.chat-feedback:empty { display: none; }
+.chat-bottom-note { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 4px; }
+.chat-bottom-note span { color: #6f7b89; font-size: 10px; line-height: 1.4; }
+.chat-bottom-note button { flex: 0 0 auto; min-height: 32px; padding: 4px 0 4px 8px; border: 0; color: #5b7090; background: transparent; font-size: 11px; }
+.chat-screen :is(button, textarea, [tabindex]):focus-visible { outline: 3px solid #3971ce; outline-offset: 2px; }
+.tour-active .chat-composer-area { display: none; }
+.tour-try-chat { width: 100%; margin-top: 20px; }
+
+.topbar-tools {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.content,
+.content > *,
+.cards > *,
+.trip-row > * {
+  min-width: 0;
+}
+
+.tour-help {
+  flex: 0 0 36px;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid #b9c5e6;
+  border-radius: 50%;
+  color: var(--brand-strong);
+  background: white;
+  font-weight: 700;
+}
+
+.home-tour-link {
+  min-height: 44px;
+  padding: 8px;
+  border: 0;
+  background: transparent;
+  color: white;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.walkthrough-host {
+  min-width: 0;
+}
+
+.tour-active .demo-notes {
+  display: none;
+}
+
+.tour-active .shell {
+  grid-template-columns: minmax(340px, 440px) minmax(340px, 1fr);
+  align-items: center;
+  gap: 32px;
+}
+
+.tour-active .device-panel {
+  position: relative;
+  min-height: 0;
+}
+
+.tour-active .device-toolbar {
+  display: none;
+}
+
+.tour-active .phone-frame {
+  max-height: calc(100dvh - 64px);
+  min-height: 560px;
+}
+
+.tour-active .pilot-status {
+  display: none;
+}
+
+.tour-focus {
+  outline: 3px solid #294acb;
+  outline-offset: 3px;
+  scroll-margin: 18px;
+}
+
+.tour-dialog {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100dvh - 64px);
+  border: 1px solid #d8dfec;
+  border-top: 4px solid var(--brand);
+  border-radius: 8px;
+  background: white;
+  box-shadow: 0 12px 40px #1c244312;
+  overflow: hidden;
+}
+
+.tour-header,
+.tour-progress,
+.tour-context,
+.tour-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.tour-header {
+  padding: 14px 20px 0;
+  color: var(--brand-strong);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.tour-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tour-expand {
+  display: none;
+  min-height: 36px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 4px;
+  color: var(--brand-strong);
+  background: #f3f5f9;
+  font-size: 12px;
+}
+
+.tour-close {
+  flex: 0 0 40px;
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: 4px;
+  color: var(--muted);
+  background: #f3f5f9;
+  font-size: 26px;
+  line-height: 1;
+}
+
+.tour-progress {
+  padding: 12px 20px 14px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.tour-progress span {
+  white-space: nowrap;
+}
+
+.tour-progress progress {
+  appearance: none;
+  width: 100%;
+  height: 5px;
+  border: 0;
+  border-radius: 3px;
+  color: var(--brand);
+  background: #e7ecf5;
+}
+
+.tour-progress progress::-webkit-progress-bar { background: #e7ecf5; border-radius: 3px; }
+.tour-progress progress::-webkit-progress-value { background: var(--brand); border-radius: 3px; }
+.tour-progress progress::-moz-progress-bar { background: var(--brand); border-radius: 3px; }
+
+.tour-content {
+  padding: 4px 24px 20px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  min-height: 0;
+}
+
+.tour-context {
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.tour-context select {
+  width: auto;
+  max-width: 100%;
+  min-height: 38px;
+  padding: 6px 26px 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--muted);
+  background: white;
+  font-size: 12px;
+}
+
+.tour-role {
+  color: var(--brand-strong);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.tour-dialog h2 {
+  margin: 0 0 14px;
+  color: var(--ink);
+  font-size: 25px;
+  line-height: 1.24;
+  letter-spacing: 0;
+}
+
+.tour-dialog h2:focus { outline: none; }
+
+.tour-dialog p {
+  margin: 0;
+  color: #4f5865;
+  font-size: 15px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.tour-instruction,
+.tour-outcome {
+  margin-top: 20px;
+}
+
+.tour-instruction strong,
+.tour-outcome strong {
+  display: block;
+  margin-bottom: 5px;
+  font-size: 13px;
+  color: var(--brand-strong);
+}
+
+.tour-outcome {
+  padding-left: 12px;
+  border-left: 3px solid #5c9c89;
+}
+
+.tour-footer {
+  padding: 16px 24px 12px;
+  border-top: 1px solid #e5e9f1;
+}
+
+.tour-footer button {
+  min-height: 46px;
+  padding: 10px 16px;
+  border-radius: 5px;
+  font-size: 14px;
+}
+
+.tour-footer .primary {
+  margin-left: auto;
+}
+
+.tour-dialog button:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.tour-dialog :is(button, select):focus-visible,
+.tour-help:focus-visible,
+.home-tour-link:focus-visible {
+  outline: 3px solid #3971ce;
+  outline-offset: 2px;
+}
+
+.tour-dialog .tour-sample-note {
+  margin: 0;
+  padding: 0 20px 14px;
+  text-align: center;
+  color: #687180;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.tour-check {
+  display: grid;
+  gap: 8px;
+  margin: 22px 0 0;
+  padding: 14px 0 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+}
+
+.tour-check legend {
+  padding: 0 0 8px;
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.5;
+}
+
+.tour-check button {
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  color: var(--ink);
+  background: white;
+  text-align: left;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.tour-check .is-correct {
+  border-color: #4a8b72;
+  color: #1c6048;
+  background: #eff9f3;
+}
+
+.tour-check .is-incorrect {
+  border-color: #bc7964;
+  background: #fdf2ef;
+}
+
+.tour-check .tour-feedback {
+  font-size: 13px;
+}
+
+.tour-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+.tour-mail-heading {
+  display: grid;
+  gap: 8px;
+  padding: 22px 18px;
+  border-bottom: 1px solid var(--line);
+  background: #edf1f7;
+}
+
+.tour-mail-heading span,
+.tour-mail-heading small {
+  color: var(--muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.tour-mail-body {
+  padding: 24px 18px;
+  background: white;
+}
+
+.tour-mail-body img {
+  width: 100%;
+  height: auto;
+}
+
+.tour-mail-body h2 {
+  color: var(--brand-strong);
+  font-size: 21px;
+}
+
+.tour-mail-body :is(p, small, dl) {
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.tour-mail-body dl {
+  display: grid;
+  grid-template-columns: 75px 1fr;
+  gap: 8px;
+  padding: 14px 0;
+  border-block: 1px solid var(--line);
+}
+
+.tour-mail-body dt { color: var(--muted); }
+.tour-mail-body dd { margin: 0; }
+.tour-mail-body .tour-mail-fleet { margin: 14px 0; }
+
+.tour-recap {
+  padding: 28px 22px;
+  background: white;
+}
+
+.tour-recap img { width: 100%; height: auto; }
+.tour-recap h2 { margin: 24px 0 20px; font-size: 22px; }
+.tour-recap ol { display: grid; gap: 18px; padding-left: 24px; }
+.tour-recap li { padding-left: 6px; color: var(--brand-strong); }
+.tour-recap li b { display: block; font-size: 14px; margin-bottom: 4px; }
+.tour-recap li span, .tour-recap p { color: var(--muted); font-size: 14px; line-height: 1.5; }
+
+@media (max-width: 900px), (display-mode: standalone) {
+  .tour-active .shell {
+    --tour-panel-height: 410px;
+    width: 100%;
+    height: 100dvh;
+    min-height: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    overflow: hidden;
+  }
+
+  .tour-active .device-panel {
+    width: 100%;
+    flex: 1 1 0;
+    display: block;
+    height: calc(100dvh - var(--tour-panel-height));
+    overflow: hidden;
+  }
+
+  .tour-active .phone-frame,
+  .tour-active .phone-frame.ios,
+  .tour-active .phone-frame.android {
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    max-height: none;
+    display: block;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .tour-active .phone-status { display: none; }
+  .tour-active .app { height: 100%; }
+  .tour-active .home-hero { padding: 22px 18px; }
+  .tour-active .home-logo { width: 250px; }
+  .tour-active .home-actions { gap: 6px; }
+  .tour-active .home-actions > span,
+  .tour-active .home-tour-link { display: none; }
+
+  .walkthrough-host {
+    width: 100%;
+    flex: 0 0 auto;
+    z-index: 3;
+  }
+
+  .tour-dialog {
+    max-height: 57dvh;
+    border-radius: 0;
+    border-inline: 0;
+    box-shadow: 0 -6px 28px #17244412;
+  }
+
+  .tour-header { padding: 6px 16px 0; }
+  .tour-expand { display: block; }
+  .tour-expanded .tour-dialog { max-height: 90dvh; }
+  .tour-close { width: 36px; height: 36px; flex-basis: 36px; }
+  .tour-progress { padding: 6px 16px 10px; }
+  .tour-content { padding: 0 18px 16px; }
+  .tour-context { margin-bottom: 12px; }
+  .tour-dialog h2 { font-size: 21px; margin-bottom: 10px; }
+  .tour-dialog p { font-size: 14px; line-height: 1.5; }
+  .tour-instruction, .tour-outcome { margin-top: 14px; }
+  .tour-footer { padding: 10px 16px 8px; }
+  .tour-dialog .tour-sample-note { padding: 0 16px max(8px, env(safe-area-inset-bottom)); font-size: 10px; }
+}
+
+@media (max-height: 540px) and (max-width: 900px) {
+  .tour-active .shell { flex-direction: row; align-items: stretch; }
+  .tour-active .device-panel { flex: 1; height: 100%; }
+  .walkthrough-host { width: 54%; height: 100%; }
+  .tour-dialog { height: 100%; max-height: 100dvh; }
 }
 
 @media print {

@@ -22,6 +22,40 @@ This standalone project is separate from DoctorsAssistant. It demonstrates the c
 - Staff request accounts by email; owner/admin approval issues credentials.
 - Admin adds users with temporary usernames, passwords, roles, and photos.
 
+## Guided Walkthrough
+
+Choose **Take a guided tour** on the home/login screen or **?** in a screen's
+header. Opening `/?walkthrough=2` starts the tour automatically.
+
+The 28-step walkthrough shows the actual app screens with a sample Cebu-to-Leyte
+trip. It covers staff access, booking, client email confirmation, waybills,
+manager/finance approvals, disbursement logging, both cancellation scenarios,
+reconciliation, audit history, the optional client portal, and trip messages. Back/Next and a
+chapter selector support replay; three short questions check the key handoffs.
+Phone users can expand the guide to read longer steps, then choose Show app.
+
+Tour records are isolated in browser memory. No emails or server writes occur,
+and exiting restores the original screen, records, role, and session.
+
+### Trip Chat Demo
+
+Open `/?chat-demo=1` without a login, or choose **Trip messages (Demo)** inside a
+staff trip or client booking. Switch **Roadlink staff** / **Client** to send and
+read both sides of one conversation. The preview includes unread badges, local
+read status, suggested replies, draft preservation while switching views, and
+Reset demo. The walkthrough's Trip messages chapter also opens the interactive
+preview.
+
+Demo conversations are isolated per trip in the current browser tab's
+`sessionStorage`. They survive refreshes in that tab; they are not delivered to
+other devices, saved in Supabase, or sent through email. Booking status is never
+changed by a chat message. Closing chat restores the preceding application
+state. No chat API or production messaging is enabled by this demo.
+
+To make chat live later: add a server-backed trip message store with participant
+authorization, server timestamps and read receipts, pagination, and delivery
+notifications. Replace the demo view switch with the signed-in participant.
+
 ## Run Locally
 
 ```bash
