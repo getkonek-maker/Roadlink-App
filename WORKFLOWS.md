@@ -5,8 +5,8 @@
 Open `/?demo=choose`. Choose Staff or Client portal in the login dialog.
 Staff then select a role and Continue; clients enter directly.
 The selected role's guide starts automatically and never changes roles.
-Coordinator, manager, and accounting have six short steps each; admin has
-three and client has five. Use Back, Next, or Skip tour. Finishing restores
+Coordinator and accounting have six short steps each, Owner / Manager has
+seven, and client has five. Use Back, Next, or Skip tour. Finishing restores
 your sample workspace without changing records or sending emails.
 The question mark replays your current role guide.
 
@@ -14,7 +14,7 @@ The question mark replays your current role guide.
 
 No username or password is needed for the demo. Real account sign-in still
 requires credentials. Use Switch access to return to Staff / Client selection.
-Direct staff links use `?demo=coordinator`, `owner`, `accounting`, or `admin`.
+Direct staff links use `?demo=coordinator`, `owner`, or `accounting`.
 Add `&walkthrough=2` to open that role's guide immediately.
 Phone view narrows the layout for laptop presentations;
 actual phones use their own full screen automatically. Desktop view returns to
@@ -29,14 +29,16 @@ All these actions remain in the browser demo and send no real emails.
 Each role opens its own tasks first. Managers review Submitted waybills under
 Pending approvals. Accounting reviews Manager Signed waybills under Finance
 approvals, then records releases under Disbursements. Cancellation checking is
-editable only by accounting. Admin manages access but cannot approve waybills,
-release funds, or complete reconciliation. Completed approval buttons disappear.
+editable only by accounting. Owner / Manager manages access from Users & access.
+There is no separate Admin demo. Completed approval buttons disappear.
 On a phone, the role navigation is at the bottom; More contains other destinations.
 
 ## Trip Messages Preview
 
 1. Open the staff demo at `/?demo=coordinator` or the client demo at `/?demo=client`.
-2. Open a trip or booking, then choose Trip messages.
+2. Open Messages to see the conversation list. Search by company, contact, route,
+   or trip number, then select a conversation. Trip messages also opens that
+   booking's conversation directly.
 3. Write a message or choose a suggested reply, then Send. Your sender identity
    stays fixed to your current account; there is no switch inside chat.
 4. Choose Reset demo to restore the sample conversation, or the back arrow to
@@ -45,6 +47,8 @@ On a phone, the role navigation is at the bottom; More contains other destinatio
 Messages stay in the current browser tab and are separate for each trip. No
 external client receives the messages. Confirmations, cancellations, approvals,
 and money movements must still use their normal booking controls.
+Coordinators see assigned trips; Owner / Manager sees all; clients see their
+company only. Accounting cannot list, open, or send client messages.
 
 The staff and client demo links open separate sample experiences, not a live
 conversation between tabs or devices. Client activation from email is planned;
@@ -83,8 +87,8 @@ Why use Google Sheets anyway:
 4. Staff can choose `Remember login details`.
 5. New staff taps `Create account request`.
 6. Staff submits name, email, and requested role.
-7. Owner/admin receives an approval request.
-8. Owner/admin approves the request.
+7. Owner / Manager receives an approval request.
+8. Owner / Manager approves the request.
 9. Staff receives temporary credentials by email.
 
 ## Client Portal Preview

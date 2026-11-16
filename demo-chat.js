@@ -1,8 +1,8 @@
 (() => {
-  const storagePrefix = "roadlinkDemoConversation:v1:";
+  const storagePrefix = "roadlinkDemoConversation:v2:";
   const demoTrip = {
     id: "DEMO-CHAT-1001", route: "Cebu to Leyte", client: "Mactan Seafoods Export",
-    contact: "Ana Lim", coordinator: "Mika Santos", vehicle: "10-wheeler truck"
+    contact: "Ana Lim", coordinator: "Mika Santos", vehicle: "10-wheeler truck", status: "pending"
   };
   let active = false;
   let snapshot;
@@ -14,12 +14,81 @@
   let notice = "";
   let previousScroll = 0;
   let previousFocus;
+  let search = "";
+
+  function canAccess(trip) {
+    const record = trip && state.trips?.find((item) => item.id === trip.id);
+    if (!record) return false;
+    trip = record;
+    if (state.session) {
+      const role = state.session.profile?.role || state.role;
+      return role === "owner" || (role === "coordinator" && trip.coordinator === state.session.profile?.name);
+    }
+    const client = state.clientSession;
+    return Boolean(client && (client.company ? trip.client === client.company : client.email && trip.email === client.email));
+  }
+
+  function accessibleTrips() {
+    return (state.trips || []).filter(canAccess);
+  }
+
+  function renderInbox() {
+    if (state.session && !["coordinator", "owner"].includes(state.session.profile?.role || state.role)) {
+      return `<section class="screen">${topbar("Messages")}<div class="content"><p>Your role does not have client messaging access.</p></div></section>`;
+    }
+    if (state.dataMode === "guided-demo") search = "";
+    const view = state.session ? "staff" : "client";
+    const all = accessibleTrips();
+    const matching = all.filter((trip) => [trip.client, trip.contact, trip.route, trip.id, trip.waybill?.plateNo].join(" ").toLowerCase().includes(search.toLowerCase()));
+    return `<section class="screen messages-screen">${topbar("Messages")}<div class="content">
+      <div class="inbox-heading"><h3>Conversations <span>${all.length}</span></h3><span class="muted">Demo messages stay on this device.</span></div>
+      <div class="field"><label for="conversationSearch">Search company, contact, route, or trip number</label>
+      <input id="conversationSearch" type="search" value="${escapeUiText(search)}" placeholder="Search conversations" autocomplete="off"></div>
+      <div class="conversation-list">${matching.map((trip) => {
+        const thread = readMessages(trip);
+        const latest = thread.at(-1);
+        const unread = thread.filter((item) => item.side !== view && !item.readBy.includes(view)).length;
+        return `<button type="button" class="conversation-row" data-conversation="${escapeUiText(trip.id)}">
+          <span class="conversation-main"><strong>${escapeUiText(trip.client)}</strong><span>${escapeUiText(trip.contact)} · ${escapeUiText(trip.route)}</span>
+          <small>${escapeUiText(latest?.text || "No messages yet.")}</small></span>
+          <span class="conversation-meta"><small>${escapeUiText(trip.id)}</small><time datetime="${escapeUiText(latest?.at || "")}">${latest ? new Date(latest.at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : ""}</time>${unread ? `<b aria-label="${unread} unread messages">${unread}</b>` : `<small>Read</small>`}</span></button>`;
+      }).join("") || `<p class="work-empty">${all.length ? "No conversations match your search." : "No conversations are available for your account."}</p>`}</div>
+      </div></section>`;
+  }
+
+  function bindInbox() {
+    document.querySelectorAll("[data-conversation]").forEach((button) => button.addEventListener("click", () => {
+      const trip = state.trips.find((item) => item.id === button.dataset.conversation);
+      start(trip);
+    }));
+    document.querySelector("#conversationSearch")?.addEventListener("input", (event) => {
+      search = event.target.value;
+      const position = event.target.selectionStart;
+      render();
+      const input = document.querySelector("#conversationSearch");
+      input.focus({ preventScroll: true });
+      if (position !== null) { try { input.setSelectionRange(position, position); } catch { /* Search inputs may not support selection ranges. */ } }
+    });
+  }
+
+  function openInbox() {
+    if (active) close();
+    search = "";
+    navigate("messages");
+  }
 
   function seedMessages(trip) {
     const now = Date.now();
+    const cancelled = ["cancelled", "needs", "reconciled"].includes(trip.status);
+    const confirmed = ["confirmed", "funds"].includes(trip.status);
+    const staffText = cancelled ? "Your cancellation has been recorded. Please message us if the shipment date changes."
+      : confirmed ? `Your ${trip.route} booking is confirmed. Please send the loading instructions here.`
+      : `Your ${trip.route} booking is ready for review. Please use the confirmation email to confirm the trip.`;
+    const clientText = cancelled ? "The shipment has been postponed. I submitted the cancellation on the booking page."
+      : confirmed ? "Thank you. Can we load at 8 AM instead of 7 AM?" : "Please confirm the truck type and loading address.";
     return [
-      { id: "sample-1", side: "staff", name: trip.coordinator || "Roadlink coordinator", text: `Hi! Your ${trip.route} booking is ready for review. Please use the confirmation email to confirm the trip.`, at: new Date(now - 1800000).toISOString(), readBy: ["staff", "client"] },
-      { id: "sample-2", side: "client", name: trip.contact || "Client contact", text: "Thank you. Can we load at 8 AM instead of 7 AM?", at: new Date(now - 1200000).toISOString(), readBy: ["client"] }
+      { id: "sample-1", side: "staff", name: trip.coordinator || "Roadlink coordinator", text: staffText, at: new Date(now - 1800000).toISOString(), readBy: ["staff", "client"] },
+      { id: "sample-2", side: "client", name: trip.contact || "Client contact", text: clientText, at: new Date(now - 1200000).toISOString(), readBy: ["client"] }
     ];
   }
 
@@ -104,6 +173,7 @@
     });
     form.addEventListener("submit", (event) => {
       event.preventDefault();
+      if (!canAccess(context)) return;
       const text = input.value.trim();
       if (!text || text.length > 1000) return;
       if (messages.length >= 100) {
@@ -131,10 +201,11 @@
 
   function start(trip) {
     if (active || window.roadlinkWalkthrough?.active) return;
+    const source = trip ? state.trips?.find((item) => item.id === trip.id) : accessibleTrips()[0];
+    if (!canAccess(source)) return false;
     snapshot = structuredClone(state);
     previousScroll = document.querySelector("#app").scrollTop;
     previousFocus = document.activeElement?.getAttribute("data-action");
-    const source = trip || demoTrip;
     context = Object.fromEntries(Object.keys(demoTrip).map((key) => [key, String(source[key] || demoTrip[key]).slice(0, 150)]));
     side = state.clientSession && !state.session ? "client" : "staff";
     senderName = String(side === "client"
@@ -169,6 +240,7 @@
 
   window.roadlinkDemoChat = {
     get active() { return active; }, start, close, render: renderChat, bind,
+    canAccess, renderInbox, bindInbox, openInbox,
     preview(trip, view = "staff") {
       const thread = seedMessages(trip);
       return html(trip, view, thread, "", "");

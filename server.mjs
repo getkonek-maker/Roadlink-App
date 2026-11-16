@@ -63,7 +63,7 @@ const seedData = {
   profiles: [
     { id: "USR-COORD", name: "Mika Santos", email: "mika@roadlink.example", role: "coordinator", roleLabel: "Coordinator", username: "mika.temp", passwordHash: hashPassword("Roadlink-8421"), company: "Roadlink", phone: "+63 917 420 1188", status: "active", initials: "MS", photo: "" },
     { id: "USR-ACCT", name: "Liza Mercado", email: "finance@roadlink.example", role: "accounting", roleLabel: "Accounting", username: "finance.temp", passwordHash: hashPassword("Roadlink-2198"), company: "Roadlink", phone: "+63 917 222 3321", status: "active", initials: "LM", photo: "" },
-    { id: "USR-OWNER", name: "Emmanuel Garces", email: "owner@roadlink.example", role: "owner", roleLabel: "Owner / Manager", username: "owner.temp", passwordHash: hashPassword("Roadlink-6714"), company: "Roadlink", phone: "+63 917 333 7788", status: "active", initials: "EG", photo: "" },
+    { id: "USR-OWNER", name: "Zeno Jief Flores", email: "owner@roadlink.example", role: "owner", roleLabel: "Owner / Manager", username: "owner.temp", passwordHash: hashPassword("Roadlink-6714"), company: "Roadlink", phone: "+63 917 333 7788", status: "active", initials: "ZF", photo: "" },
     { id: "USR-ADMIN", name: "Roadlink Admin", email: "admin@roadlink.example", role: "admin", roleLabel: "Admin", username: "admin.temp", passwordHash: hashPassword("Roadlink-0047"), company: "Roadlink", phone: "+63 917 444 0047", status: "active", initials: "AD", photo: "" },
     { id: "CLIENT-MACTAN", name: "Ana Lim", email: "ana@mactanseafreight.example", role: "client", roleLabel: "Client", username: "ana.client", passwordHash: hashPassword("Client-2407"), company: "Mactan Seafoods Export", phone: "+63 917 420 1188", status: "active", initials: "AL", photo: "" }
   ],

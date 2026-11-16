@@ -9,7 +9,7 @@
     demoRole = role;
     state.role = role === "client" ? null : role;
     state.clientSession = role === "client" ? { ...clientDemoUsers[0], id: "CLIENT-MACTAN", name: "Ana Lim", role: "client" } : null;
-    const person = role === "owner" ? "Emmanuel Garces" : role === "accounting" ? "Liza Mercado" : role === "admin" ? "Roadlink Admin" : "Mika Santos";
+    const person = role === "owner" ? "Zeno Jief Flores" : role === "accounting" ? "Liza Mercado" : "Mika Santos";
     state.session = role === "client" ? null : { profile: { id: `DEMO-${role}`, name: person, role } };
   }
 
@@ -28,7 +28,7 @@
     state.trips.forEach((trip, index) => {
       const date = new Date(); date.setDate(date.getDate() + 7 + index * 2);
       trip.date = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-      if (trip.status === "funds") Object.assign(trip.waybill, { approvedBy: "Emmanuel Garces", financeBy: "Liza Mercado", status: "Approved" });
+      if (trip.status === "funds") Object.assign(trip.waybill, { approvedBy: "Zeno Jief Flores", financeBy: "Liza Mercado", status: "Approved" });
     });
     const awaiting = structuredClone(state.trips[0]);
     Object.assign(awaiting, { id: "RL-2412", status: "confirmed", budget: [], route: "Cebu to Bohol", destination: "Tagbilaran City, Bohol" });
@@ -37,8 +37,8 @@
     state.trips.push(awaiting);
     const financeReview = structuredClone(awaiting);
     Object.assign(financeReview, { id: "RL-2414", route: "Cebu to Dumaguete", destination: "Dumaguete City, Negros Oriental" });
-    Object.assign(financeReview.waybill, { number: "037960", approvedBy: "Emmanuel Garces", status: "Manager Signed" });
-    financeReview.timeline.push(eventLine("Emmanuel Garces approved the waybill; accounting notified"));
+    Object.assign(financeReview.waybill, { number: "037960", approvedBy: "Zeno Jief Flores", status: "Manager Signed" });
+    financeReview.timeline.push(eventLine("Zeno Jief Flores approved the waybill; accounting notified"));
     state.trips.push(financeReview);
     const ready = structuredClone(financeReview);
     Object.assign(ready, { id: "RL-2415", route: "Cebu to Bacolod", destination: "Bacolod City, Negros Occidental" });
@@ -74,11 +74,23 @@
   function navigationItems() {
     const count = (status) => state.trips.filter((trip) => activeTrip(trip) && trip.waybill.status === status).length;
     const checks = state.trips.filter((trip) => trip.status === "needs").length;
-    if (state.clientSession && !state.session) return [["clientPortal", "My bookings"], ["clientBooking", "Request booking"], ["chatClient", "Messages"]];
-    if (state.role === "owner") return [["tasks", "Overview", roleWorkItems().length + state.approvalRequests.filter((item) => item.status === "Pending").length], ["managerApprovals", "Pending approvals", count("Submitted")], ["dashboard", "Trips"], ["reconcile", "Cancellation alerts", checks], ["audit", "Audit history"], ["chatStaff", "Messages"], ["users", "Account approvals", state.approvalRequests.filter((item) => item.status === "Pending").length]];
-    if (state.role === "accounting") return [["tasks", "My tasks", roleWorkItems().length], ["financeApprovals", "Finance approvals", count("Manager Signed")], ["disbursements", "Disbursements"], ["reconcile", "Cancellation checking", checks], ["dashboard", "Trips"], ["chatStaff", "Messages"]];
+    if (state.clientSession && !state.session) return [["clientPortal", "My bookings"], ["clientBooking", "Request booking"], ["messages", "Messages"]];
+    if (state.role === "owner") return [["tasks", "Overview", roleWorkItems().length + state.approvalRequests.filter((item) => item.status === "Pending").length], ["managerApprovals", "Pending approvals", count("Submitted")], ["dashboard", "Trips"], ["reconcile", "Cancellation alerts", checks], ["audit", "Audit history"], ["messages", "Messages"], ["users", "Users & access", state.approvalRequests.filter((item) => item.status === "Pending").length]];
+    if (state.role === "accounting") return [["tasks", "My tasks", roleWorkItems().length], ["financeApprovals", "Finance approvals", count("Manager Signed")], ["disbursements", "Disbursements"], ["reconcile", "Cancellation checking", checks], ["dashboard", "Trips"], ["audit", "Audit history"]];
     if (state.role === "admin") return [["users", "Users & access"], ["dashboard", "Trip records"], ["audit", "Audit history"]];
-    return [["tasks", "My tasks", roleWorkItems().length], ["dashboard", "Trips"], ["newTrip", "New booking"], ["waybills", "Waybills"], ["chatStaff", "Messages"]];
+    return [["tasks", "My tasks", roleWorkItems().length], ["dashboard", "Trips"], ["newTrip", "New booking"], ["waybills", "Waybills"], ["messages", "Messages"]];
+  }
+
+  function currentNavigation() {
+    const screen = state.screen;
+    const fallback = screen === "chat" ? "messages" : screen === "detail" ? "dashboard"
+      : screen === "waybill" ? (state.role === "owner" ? "managerApprovals" : state.role === "accounting" ? "financeApprovals" : "waybills")
+      : screen === "budget" ? "disbursements" : screen === "clientBookingDetail" ? "clientPortal"
+      : screen === "bookingRequest" ? "tasks" : screen;
+    const section = state.parentNav?.screen === screen ? state.parentNav.section : fallback;
+    const items = navigationItems();
+    const position = items.findIndex(([key]) => key === section);
+    return { section, label: items[position]?.[1] || "Trips", inMore: position >= 3 };
   }
 
   function renderChrome() {
@@ -88,9 +100,11 @@
     const nav = document.querySelector("#workspaceNav");
     const client = Boolean(state.clientSession) && !state.session;
     const items = navigationItems();
-    const navButton = ([screen, label, count]) => `<button type="button" data-workspace-nav="${screen}" class="${state.screen === screen ? "is-current" : ""}"><span>${label}</span>${count ? `<b>${count}</b>` : ""}</button>`;
+    const current = currentNavigation();
+    const guiding = Boolean(window.roadlinkWalkthrough?.active);
+    const navButton = ([screen, label, count]) => `<button type="button" data-workspace-nav="${screen}" ${current.section === screen ? 'aria-current="page"' : ""} class="${current.section === screen ? `is-current ${guiding ? "tour-nav-current" : ""}` : ""}"><span>${label}</span>${count ? `<b>${count}</b>` : ""}</button>`;
     nav.innerHTML = `<div class="workspace-brand"><img src="assets/roadlink-logo.svg" alt="Roadlink Cargo Transport Service"><span>Trip Control</span></div><nav>${items.map(navButton).join("")}</nav><div class="workspace-nav-footer"><button type="button" data-workspace-tour>Guided tour</button><button type="button" data-workspace-phone>${document.body.classList.contains("mobile-preview") ? "Desktop view" : "Phone view"}</button><div class="workspace-person"><span class="workspace-avatar">${client ? "AL" : initials(state.session?.profile?.name || "Roadlink")}</span><div><strong>${escapeUiText(client ? state.clientSession.contact || state.clientSession.name : state.session?.profile?.name || "Roadlink staff")}</strong><small>${client ? "Client" : roleLabel()}</small></div></div></div>`;
-    const locked = Boolean(window.roadlinkWalkthrough?.active || window.roadlinkDemoChat?.active);
+    const locked = guiding;
     let mobileNav = document.querySelector("#mobileNav");
     if (!mobileNav) { mobileNav = document.createElement("nav"); mobileNav.id = "mobileNav"; mobileNav.className = "workspace-mobile-nav"; mobileNav.setAttribute("aria-label", "Role navigation"); document.querySelector("#phoneFrame").append(mobileNav); }
     mobileNav.hidden = !workspace || locked;
@@ -99,18 +113,27 @@
     toolbar.hidden = !demoActive || locked;
     toolbar.innerHTML = demoActive ? `<span class="workspace-demo-label">Sample data · ${client ? "Client" : roleLabel()}</span><button type="button" data-workspace-access>Switch access</button>${document.body.classList.contains("mobile-preview") ? `<button type="button" class="demo-layout-button" data-workspace-phone>Desktop view</button>` : ""}` : "";
     nav.inert = locked;
+    mobileNav.hidden = !workspace;
+    mobileNav.inert = locked;
+    const more = mobileNav.querySelector("summary");
+    more.classList.toggle("is-current", current.inMore);
+    more.classList.toggle("tour-nav-current", guiding && current.inMore);
     toolbar.inert = locked;
     document.querySelectorAll("[data-workspace-nav]").forEach((button) => button.addEventListener("click", () => {
       const screen = button.dataset.workspaceNav;
       if (screen === "audit" && !state.trips.length) { setToast("Open a trip to view its audit history."); return; }
-      if (screen === "chatClient") state.selectedTripId = clientTrips()[0]?.id;
-      if (["chatStaff", "chatClient"].includes(screen)) {
-        if (!selectedTrip()) { setToast("Open a booking to start a conversation."); return; }
-        handleAction(screen);
-      } else navigate(screen);
+      if (window.roadlinkDemoChat?.active) window.roadlinkDemoChat.close();
+      if (screen === "messages") window.roadlinkDemoChat.openInbox();
+      else navigate(screen);
     }));
-    document.querySelectorAll("[data-workspace-tour]").forEach((button) => button.addEventListener("click", () => window.roadlinkWalkthrough.start()));
-    document.querySelectorAll("[data-workspace-access]").forEach((button) => button.addEventListener("click", () => navigate("home")));
+    document.querySelectorAll("[data-workspace-tour]").forEach((button) => button.addEventListener("click", () => {
+      if (window.roadlinkDemoChat?.active) window.roadlinkDemoChat.close();
+      window.roadlinkWalkthrough.start();
+    }));
+    document.querySelectorAll("[data-workspace-access]").forEach((button) => button.addEventListener("click", () => {
+      if (window.roadlinkDemoChat?.active) window.roadlinkDemoChat.close();
+      navigate("home");
+    }));
     document.querySelector("[data-workspace-logout]")?.addEventListener("click", logoutCurrentUser);
     document.querySelectorAll("[data-workspace-phone]").forEach((button) => button.addEventListener("click", () => {
       const mobile = document.body.classList.toggle("mobile-preview");
@@ -168,5 +191,5 @@
     throw new Error("This action is available in the connected app. The current workspace uses sample data.");
   }
 
-  window.roadlinkWorkspace = { renderChrome, startDemo, enterGuidedDemo, closeDemo, request, get demoActive() { return demoActive; } };
+  window.roadlinkWorkspace = { renderChrome, startDemo, enterGuidedDemo, closeDemo, request, currentNavigation, get demoActive() { return demoActive; } };
 })();

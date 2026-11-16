@@ -1,8 +1,7 @@
 const roles = [
   { id: "coordinator", label: "Coordinator", icon: "CO", username: "mika.temp", password: "Roadlink-8421", detail: "Create trips, waybills, and client links." },
   { id: "accounting", label: "Accounting", icon: "AC", username: "finance.temp", password: "Roadlink-2198", detail: "Log releases, returns, cheques, and reconciliation." },
-  { id: "owner", label: "Owner / Manager", icon: "OM", username: "owner.temp", password: "Roadlink-6714", detail: "Approve waybills and review funded cancellations." },
-  { id: "admin", label: "Admin", icon: "AD", username: "admin.temp", password: "Roadlink-0047", detail: "Add users, roles, temporary passwords, and photos." }
+  { id: "owner", label: "Owner / Manager", icon: "OM", username: "owner.temp", password: "Roadlink-6714", detail: "Approve waybills, review cancellations, and manage staff access." }
 ];
 
 const clientDemoUsers = [
@@ -125,7 +124,7 @@ const state = {
   users: [
     { name: "Mika Santos", role: "Coordinator", username: "mika.temp", password: "Roadlink-8421", initials: "MS", photo: "" },
     { name: "Liza Mercado", role: "Accounting", username: "finance.temp", password: "Roadlink-2198", initials: "LM", photo: "" },
-    { name: "Emmanuel Garces", role: "Owner / Manager", username: "owner.temp", password: "Roadlink-6714", initials: "EG", photo: "" }
+    { name: "Zeno Jief Flores", role: "Owner / Manager", username: "owner.temp", password: "Roadlink-6714", initials: "ZF", photo: "" }
   ],
   trips: [
     {
@@ -502,8 +501,14 @@ function setToast(message, duration = 2600) {
 }
 
 function navigate(screen, tripId) {
+  const previous = state.screen;
   state.screen = screen;
   if (tripId) state.selectedTripId = tripId;
+  const section = screen === "detail" ? (["dashboard", "reconcile"].includes(previous) ? previous : selectedTrip()?.status === "needs" ? "reconcile" : "dashboard")
+    : screen === "waybill" ? (state.role === "owner" ? "managerApprovals" : state.role === "accounting" ? "financeApprovals" : "waybills")
+    : screen === "budget" ? "disbursements" : screen === "clientBookingDetail" ? "clientPortal"
+    : screen === "bookingRequest" ? "tasks" : screen;
+  state.parentNav = { screen, section };
   state.cancellationFormOpen = false;
   render();
 }
@@ -525,6 +530,7 @@ function render() {
     clientPortal: renderClientPortal,
     clientBooking: renderClientBookingRequest,
     clientBookingDetail: renderClientBookingDetail,
+    bookingRequest: renderBookingRequestReview,
     accountRequest: renderAccountRequest,
     dashboard: renderDashboard,
     tasks: renderTaskHome,
@@ -540,6 +546,7 @@ function render() {
     waybill: renderWaybill,
     waybills: renderWaybillQueue,
     users: renderUsers,
+    messages: () => window.roadlinkDemoChat.renderInbox(),
     chat: () => window.roadlinkDemoChat.render()
   };
 
@@ -912,7 +919,7 @@ function renderAccountRequest() {
         <div>
           <p class="eyebrow">Request Access</p>
           <h1>Create account</h1>
-          <p>Coordinator, accounting, owner, and admin accounts require owner/admin approval before credentials are issued.</p>
+          <p>Staff accounts require Owner / Manager approval.</p>
         </div>
 
         <form class="login-form" id="accountRequestForm">
@@ -930,7 +937,6 @@ function renderAccountRequest() {
               <option>Coordinator</option>
               <option>Accounting</option>
               <option>Owner / Manager</option>
-              <option>Admin</option>
               <option>Client</option>
             </select>
           </div>
@@ -943,7 +949,7 @@ function renderAccountRequest() {
 
         <div class="request-summary">
           <strong>Approval flow</strong>
-          <span>Owner/admin receives the request in the app for review.</span>
+          <span>Owner / Manager receives the request for review.</span>
           <span>Once approved, the staff member receives temporary credentials by email.</span>
         </div>
       </div>
@@ -997,8 +1003,8 @@ function renderDashboard() {
         <div class="status-grid">
           <div class="metric"><b>${state.trips.length}</b><span>Total trips</span></div>
           <div class="metric"><b>${counts.funds}</b><span>Funds released</span></div>
-          <div class="metric"><b>${counts.pending}</b><span>Waiting client</span></div>
-          <div class="metric"><b>${riskCount}</b><span>At risk</span></div>
+          <div class="metric"><b>${counts.pending}</b><span>Awaiting confirmation</span></div>
+          <div class="metric"><b>${riskCount}</b><span>Cancelled with releases</span></div>
         </div>
 
         ${["coordinator", "owner"].includes(state.role) && state.bookingRequests.some((item) => item.status !== "Converted to trip") ? `
@@ -1030,7 +1036,7 @@ function renderDashboard() {
           `).join("")}
         </div>
 
-        <section class="trip-table-section" aria-label="Trips"><table class="trip-table"><thead><tr><th>Route / company</th><th>Vehicle / plate</th><th>Trip date</th><th>Status</th><th>Budget logged</th><th></th></tr></thead><tbody>${visibleTrips.map((trip) => `<tr><td><strong>${trip.route}</strong><span>${trip.client}</span></td><td><strong>${trip.vehicle}</strong><span>${trip.waybill?.plateNo || "For assignment"}</span></td><td>${displayDate(trip.date)}</td><td><span class="status-pill ${trip.status}">${statusLabels[trip.status]}</span></td><td>${money(totalBudget(trip))}</td><td><button class="tiny-btn" type="button" data-open-trip="${trip.id}">Open trip</button></td></tr>`).join("") || `<tr><td colspan="6">No trips match this status.</td></tr>`}</tbody></table></section>
+        <section class="trip-table-section" aria-label="Trips"><table class="trip-table"><thead><tr><th>Route / company</th><th>Vehicle / plate</th><th>Trip date</th><th>Status</th><th>Released funds</th><th></th></tr></thead><tbody>${visibleTrips.map((trip) => `<tr><td><strong>${trip.route}</strong><span>${trip.client}</span></td><td><strong>${trip.vehicle}</strong><span>${trip.waybill?.plateNo || "For assignment"}</span></td><td>${displayDate(trip.date)}</td><td><span class="status-pill ${trip.status}">${statusLabels[trip.status]}</span></td><td>${money(totalBudget(trip))}</td><td><button class="tiny-btn" type="button" data-open-trip="${trip.id}">Open trip</button></td></tr>`).join("") || `<tr><td colspan="6">No trips match this status.</td></tr>`}</tbody></table></section>
         <div class="cards trip-cards">
           ${visibleTrips.map(renderTripCard).join("") || `<div class="card"><strong>No trips here</strong><span>Change the filter or create a new trip.</span></div>`}
         </div>
@@ -1102,6 +1108,7 @@ function renderDisbursements() {
 }
 
 function roleLabel() {
+  if (state.role === "admin") return "Access management";
   return (roles.find((role) => role.id === state.role) || roles[0]).label;
 }
 
@@ -1132,7 +1139,7 @@ function renderTripCard(trip) {
         <span><b>Plate No.</b>${plateNo}</span>
         <span><b>Trip Date</b>${displayDate(trip.date)}</span>
         <span><b>Coordinator</b>${trip.coordinator}</span>
-        <span><b>Budget</b>${money(total)}</span>
+        <span><b>Released funds</b>${money(total)}</span>
       </div>
       <div class="actions">
         <button class="secondary" type="button" data-open-trip="${trip.id}">Open trip</button>
@@ -1250,7 +1257,7 @@ function renderDetail() {
         </div>
       </div>
       <div class="content">
-        <button class="secondary chat-entry" type="button" data-action="chatStaff">Trip messages <span class="chat-inline-badge">Demo</span></button>
+        ${window.roadlinkDemoChat?.canAccess(trip) ? `<button class="secondary chat-entry" type="button" data-action="chatStaff">Trip messages <span class="chat-inline-badge">Demo</span></button>` : ""}
         <article class="card">
           <strong>Client confirmation email</strong>
           <span>${trip.contact} receives a branded Roadlink email at ${trip.email}. Clients can confirm, cancel, or contact Roadlink from the email link.</span>
@@ -1279,13 +1286,13 @@ function renderDetail() {
             <span>Plate ${trip.waybill.plateNo || "For encoding"}</span>
             <span>Cash out ${money(cashOutTotal(trip.waybill))}</span>
           </div>
-          <button class="secondary" type="button" data-action="waybill">Prepare / open waybill</button>
+          <button class="secondary" type="button" data-action="waybill">${state.role === "coordinator" && trip.waybill.status === "Draft" ? "Prepare waybill" : "Open waybill"}</button>
         </article>
 
         <article class="card">
           <div class="section-head">
             <div>
-              <h3>Budget logged</h3>
+              <h3>Released funds</h3>
               <p>Cash, cheques, POs, fuel, shipping, meals, and misc.</p>
             </div>
             <span class="amount">${money(totalBudget(trip))}</span>
@@ -1320,11 +1327,11 @@ function renderBudget() {
   const trip = selectedTrip();
   return `
     <section class="screen">
-      ${topbar("Budget Log")}
+      ${topbar("Record release")}
       <form class="content form-grid" id="budgetForm">
         <article class="card">
           <strong>${trip.route}</strong>
-          <span>Current logged budget: ${money(totalBudget(trip))}</span>
+          <span>Released so far: ${money(totalBudget(trip))}</span>
           <div class="trip-fields compact-fields">
             <span><b>Company</b>${trip.client}</span>
             <span><b>Vehicle Type</b>${trip.vehicle}</span>
@@ -1566,6 +1573,7 @@ function renderReconcile() {
           <span class="pill danger-pill">For immediate checking</span>
           <strong>${active.route}</strong>
           <span>${active.client} cancelled after ${money(totalBudget(active))} was logged.</span>
+          <button class="secondary" type="button" data-action="detail" data-trip-action="${active.id}">Review trip</button>
         </article>
 
         <div class="form-card">
@@ -1701,7 +1709,6 @@ function renderUsers() {
               <option>Coordinator</option>
               <option>Accounting</option>
               <option>Owner / Manager</option>
-              <option>Admin</option>
             </select>
           </div>
           <div class="field">
@@ -1744,6 +1751,7 @@ function renderUsers() {
 function bindScreenEvents() {
   if (window.roadlinkWalkthrough?.active) return;
   if (window.roadlinkDemoChat?.active) { window.roadlinkDemoChat.bind(); return; }
+  if (state.screen === "messages") window.roadlinkDemoChat.bindInbox();
   document.querySelector("#demoAccessForm")?.addEventListener("submit", (event) => {
     event.preventDefault();
     window.roadlinkWorkspace.enterGuidedDemo(new FormData(event.currentTarget).get("role"));
@@ -1783,7 +1791,10 @@ function bindScreenEvents() {
   });
 
   document.querySelectorAll("[data-open-booking-request]").forEach((button) => {
-    button.addEventListener("click", () => convertBookingRequest(button.dataset.openBookingRequest));
+    button.addEventListener("click", () => {
+      state.selectedRequestId = button.dataset.openBookingRequest;
+      navigate("bookingRequest");
+    });
   });
 
   document.querySelectorAll("[data-client-trip-detail]").forEach((button) => {
@@ -1948,6 +1959,7 @@ function handleAction(action) {
     liveClientLogin: () => openAccountLogin("liveClientLogin"),
     chatStaff: () => window.roadlinkDemoChat?.start(trip),
     chatClient: () => window.roadlinkDemoChat?.start(trip),
+    messages: () => window.roadlinkDemoChat?.openInbox(),
     back: () => {
       state.screen = previous === "client" ? (state.clientSession ? "clientPortal" : "detail") : (["login", "liveLogin", "clientLogin", "liveClientLogin", "accountRequest"].includes(previous) ? "home" : roleHomeScreen());
       render();
@@ -1961,6 +1973,8 @@ function handleAction(action) {
     logout: () => logoutCurrentUser(),
     logoutClient: () => logoutCurrentUser(),
     newTrip: () => navigate("newTrip"),
+    detail: () => navigate("detail", trip?.id),
+    convertRequest: () => convertBookingRequest(state.selectedRequestId),
     budget: () => navigate("budget", trip.id),
     clientPreview: () => openClientPreview(trip.id),
     openReconcile: () => navigate("reconcile", trip?.status === "needs" ? trip.id : state.trips.find((item) => item.status === "needs")?.id),
@@ -2051,7 +2065,7 @@ async function requestAccount(event) {
     state.approvalRequests.unshift({ ...request, id: `REQ-${Math.floor(1200 + Math.random() * 8000)}` });
   }
   state.screen = "home";
-  setToast(`Approval request sent to owner/admin for ${request.email}`, 5000);
+  setToast(`Approval request sent to Owner / Manager for ${request.email}`, 5000);
 }
 
 async function approveAccountRequest(requestId) {
@@ -2224,7 +2238,7 @@ function makeWaybillForTrip(id, form) {
     helper: 0,
     labor: 0,
     others: 0,
-    preparedBy: roleLabel(),
+    preparedBy: state.session?.profile?.name || roleLabel(),
     approvedBy: "",
     financeBy: "",
     paymentReceivedBy: "",
@@ -2251,7 +2265,7 @@ async function createTrip(event) {
     vehicle: String(form.get("vehicle") || ""),
     date: String(form.get("date") || ""),
     cargo: String(form.get("cargo") || ""),
-    coordinator: roleLabel(),
+    coordinator: state.session?.profile?.name || roleLabel(),
     preferredChannel: extraChannel ? `Email + ${extraChannel}` : "Email",
     status: "pending",
     cancelledReason: "",
@@ -2549,9 +2563,23 @@ async function createClientBookingRequest(event) {
   setToast("Booking request sent to Roadlink coordinator.");
 }
 
+function renderBookingRequestReview() {
+  const request = state.bookingRequests.find((item) => item.id === state.selectedRequestId);
+  if (!request) return `<section class="screen">${topbar("Booking request")}<div class="content"><p>This request is no longer available.</p></div></section>`;
+  return `<section class="screen">${topbar("Review booking request")}<div class="content">
+    <h2>${escapeUiText(request.company)}</h2><div class="trip-fields request-review">
+    ${[["From", request.origin], ["To", request.destination], ["Vehicle", request.vehicle], ["Trip date", displayDate(request.date)],
+      ["Authorized contact", request.contact], ["Email", request.email], ["Phone", request.phone], ["Cargo", request.cargo || "Not provided"]]
+      .map(([label, value]) => `<span><b>${label}</b>${escapeUiText(value || "Not provided")}</span>`).join("")}</div>
+    <p>Check vehicle availability and confirm the details with the client before creating the trip.</p>
+    ${request.status === "Converted to trip" ? `<p>This request has already been converted.</p>` : `<button class="primary" type="button" data-action="convertRequest" ${state.convertingRequestId ? "disabled" : ""}>${state.convertingRequestId ? "Creating trip..." : "Create trip from request"}</button>`}
+    </div>${state.toast ? `<div class="toast">${state.toast}</div>` : ""}</section>`;
+}
+
 async function convertBookingRequest(requestId) {
   const request = state.bookingRequests.find((item) => item.id === requestId);
-  if (!request) return;
+  if (!request || request.status === "Converted to trip" || state.convertingRequestId) return;
+  if (!["coordinator", "owner"].includes(state.role)) return;
   const id = `RL-${Math.floor(2500 + Math.random() * 7000)}`;
   const trip = {
     id,
@@ -2565,7 +2593,7 @@ async function convertBookingRequest(requestId) {
     vehicle: request.vehicle,
     date: request.date,
     cargo: request.cargo,
-    coordinator: roleLabel(),
+    coordinator: state.session?.profile?.name || roleLabel(),
     preferredChannel: "Email",
     status: "pending",
     cancelledReason: "",
@@ -2585,7 +2613,7 @@ async function convertBookingRequest(requestId) {
       helper: 0,
       labor: 0,
       others: 0,
-      preparedBy: roleLabel(),
+      preparedBy: state.session?.profile?.name || roleLabel(),
       approvedBy: "",
       financeBy: "",
       paymentReceivedBy: "",
@@ -2595,16 +2623,20 @@ async function convertBookingRequest(requestId) {
     reconciliation: { cashReturned: false, chequeVoided: false, poCancelled: false, expensesUsed: "" },
     timeline: [eventLine("Client portal request converted into official Roadlink trip")]
   };
+  state.convertingRequestId = request.id;
+  render();
   try {
     const result = await apiRequest("/api/trips", { method: "POST", body: JSON.stringify({ trip }) });
     syncTripFromServer(result.trip || trip);
   } catch (error) {
+    state.convertingRequestId = null;
     if (state.dataMode !== "offline-demo") {
       setToast(error?.message || "The booking request was not converted.", 6000);
       return;
     }
     state.trips.unshift(trip);
   }
+  state.convertingRequestId = null;
   request.status = "Converted to trip";
   state.selectedTripId = id;
   state.screen = "detail";

@@ -19,19 +19,21 @@ This standalone project is separate from DoctorsAssistant. It demonstrates the c
 - Manager and finance approve before disbursement.
 - Accounting records cash return, cheque voiding, PO cancellation, and used expenses.
 - Staff log in with role, username, password, and optional remembered details.
-- Staff request accounts by email; owner/admin approval issues credentials.
-- Admin adds users with temporary usernames, passwords, roles, and photos.
+- Staff request accounts by email; Owner / Manager approves access.
+- Owner / Manager manages users, roles, temporary access, and photos.
 
 ## Guided Walkthrough
 
 The demo starts with a Staff / Client portal dialog over the Roadlink video.
 Staff choose a role and Continue. Clients enter directly, without credentials.
-The matching role guide starts automatically: six steps for coordinator,
-manager, or accounting; three for admin; five for client.
+The matching role guide starts automatically: six steps for coordinator or
+accounting, seven for Owner / Manager, and five for client.
 Guides never switch roles. Each shows only that role's actions and handoffs
 using sample records. Use **?** or Guided tour to replay the current role guide.
 Short dialogs appear inside the app beside a highlighted control, with Back,
 Next, and Skip tour. There is no separate instructions panel or phone frame.
+Each step also highlights its sidebar destination. Phones highlight the bottom
+navigation or More and show the destination's name above the instructions.
 
 Tour records are isolated in browser memory. No emails or server writes occur,
 and exiting restores the original screen, records, role, and session.
@@ -45,17 +47,16 @@ and exiting restores the original screen, records, role, and session.
 - Phone layout on a laptop: add `&mobile=1`; actual phones adapt automatically.
 
 The demo entry first separates Staff and Client. Staff then choose Coordinator,
-Manager, Accounting, or Admin without credentials. This opens sample data, not a real
+Owner / Manager or Accounting without credentials. This opens sample data, not a real
 account. Real staff/client account sign-in remains available separately and
 still requires credentials. Anonymous demo entry does not call the backend.
 
 Each role has its own landing page and navigation on desktop and phone:
 - Coordinator: assigned booking tasks, trips, new booking, waybills, messages.
 - Manager: overview, pending approvals, trips, cancellation alerts, audit,
-  messages, and account approvals.
+  messages, and Users & access. Sample manager: Zeno Jief Flores.
 - Accounting: tasks, finance approvals, disbursements, cancellation checking,
-  trips, and messages.
-- Admin: users and access, trip records, and audit; no automatic financial powers.
+  trips, and audit history. Client messages are not available to accounting.
 - Client: own bookings, booking requests, and messages.
 
 Approval buttons appear only at the correct stage for the responsible role:
@@ -81,6 +82,10 @@ public files and assets enter `dist/`. Secrets and backend source are excluded.
 ### Trip Chat Demo
 
 Choose **Trip messages (Demo)** inside a staff trip or client booking.
+Messages in navigation opens a searchable conversation inbox, not the last
+selected trip. Rows show company, contact, route, trip number, latest message,
+time, and unread count. Coordinators can access assigned trips only; managers
+can access all conversations; clients can access their company only.
 The sender is fixed to the current account; there is no staff/client identity
 switch inside chat. Staff and client demos have separate entrances. Suggested
 replies and Reset demo are available. The client guide explains messaging
@@ -96,6 +101,16 @@ To make chat live later: add a server-backed trip message store with participant
 authorization, server timestamps and read receipts, pagination, and delivery
 notifications. The current sender restriction is a demo UI behavior, not a
 replacement for server-side participant authorization.
+
+### UI Regression Checks
+
+`npm run test:ui` runs the browser checks in `scripts/check-demo-ui.cjs`.
+Install Playwright locally or set `PLAYWRIGHT_MODULE` to an available
+installation. Set `CHROME_EXECUTABLE` when using an installed browser, and
+`ROADLINK_TEST_BASE` to test a deployed URL. The default URL is localhost:4175.
+The checks cover trip review, request review before conversion, conversation
+access/search, approval order, and role guides with navigation highlights at
+four screen sizes. No real API mutations are sent.
 
 ## Run Locally
 
@@ -232,8 +247,8 @@ Pilot limitation:
 6. Review the PHP 15,000 cash release and cheque/PO records.
 7. Open `Waybill`.
 8. Submit the waybill for approval.
-9. Log in as manager/admin to use `Approve (Manager)`.
-10. Log in as accounting/admin to use `Approve (Finance)`.
+9. Log in as Owner / Manager to use `Approve (Manager)`.
+10. Log in as Accounting to use `Approve (Finance)`.
 11. Print or email the waybill to see the paper-style layout.
 12. Open the client confirmation preview.
 13. Cancel the booking as the client.
@@ -253,7 +268,7 @@ Pilot limitation:
 
 1. From the home screen, tap `Request account`.
 2. Submit a staff name, email, and requested role.
-3. Log in as owner/admin.
+3. Log in as Owner / Manager.
 4. Open `Users`.
 5. Approve the pending request.
 6. The prototype adds the user and simulates emailing their credentials.

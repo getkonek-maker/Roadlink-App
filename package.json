@@ -12,6 +12,7 @@
     "check": "node --check app.js && node --check workspace.js && node --check walkthrough.js && node --check demo-chat.js && node --check server.mjs",
     "build:web": "node scripts/build-web.mjs",
     "test": "node --test test/*.test.mjs",
+    "test:ui": "node scripts/check-demo-ui.cjs",
     "verify": "npm run check && npm test"
   }
 }

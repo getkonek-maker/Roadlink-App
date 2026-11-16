@@ -20,21 +20,33 @@
 - Entry: Staff / Client dialog over the fleet video. Staff choose a role;
   clients enter directly. No demo credentials, tour links, or extra footer CTAs.
 - Role guides start automatically after entry and keep the same identity:
-  coordinator 6 steps, manager 6, accounting 6, admin 3, client 5.
-- Direct workspaces: `?demo=coordinator`, `owner`, `accounting`, `admin`,
+  coordinator 6 steps, manager 7, accounting 6, client 5.
+- Direct workspaces: `?demo=coordinator`, `owner`, `accounting`,
   or `client`. Add `&walkthrough=2` for the selected role's guide.
 - Legacy generic `?demo=1&walkthrough=2` links now open the entry dialog.
 - Phone demo: add `&mobile=1`. Actual phones adapt automatically.
-- Asset/cache release marker: `web-app-v15`; PWA cache version 15.
+- Asset/cache release marker: `web-app-v16`; PWA cache version 16.
 - Role-specific tasks and nav, stage-specific approvals, read-only manager
   checking, and backend rejection of admin financial actions remain in place.
 - Switch access returns to the entry dialog. Toolbar and client portal layout
   are simplified. Confirmed client bookings now show a cancellation action and
   reason field; empty cancellation reasons are blocked.
-- Ten automated tests pass. Browser tests cover every role guide at desktop,
+- Thirteen automated tests pass. Browser tests cover every role guide at desktop,
   phone, narrow-phone, and landscape sizes, constant identity, real highlighted
   controls, replay, Escape, state restoration, client cancellation, and zero
   backend calls. No shared live chat or email activation is added.
+- Latest UX release: Review trip handler repaired; searchable Messages inbox;
+  assigned-coordinator, manager, and client-company conversation checks;
+  accounting excluded; Admin demo removed; Zeno Jief Flores used in sample
+  manager profiles and audit entries. Live audit records were not rewritten.
+- Owner / Manager handles Users & access. Legacy backend admin authentication
+  remains for account compatibility, without financial or messaging powers;
+  no real users were silently promoted, deleted, or migrated.
+- Guides use exact page/button names and highlight the current navigation
+  destination along with the control. Detail pages preserve parent navigation.
+- Opening a client request now shows a review page. Conversion needs an
+  explicit command and blocks duplicate clicks in the current session.
+- Reusable browser checks: `npm run test:ui` with Playwright available.
 - Demo records stay in memory; chat stays in tab sessionStorage. Real account
   sign-in is separate and still requires credentials. Guides restore the
   preceding records and session on exit.
@@ -70,6 +82,21 @@
   confirmation and waybill email.
 - `google-apps-script/sheets-webhook.gs`: read-only Sheets mirror receiver.
 - `test/server.test.mjs`: API security and complete workflow tests.
+- `test/demo-chat.test.mjs`: conversation ownership, role restrictions, and
+  fixed sender identity. `scripts/check-demo-ui.cjs`: browser regressions.
+
+## Next Live-Operations Work
+
+This release improves the demo's navigation, messaging preview, and instructions.
+It does not complete the remaining live-operation work:
+- Per-release financial checking with partial returns, amounts, balances, and evidence.
+- Versioned record edits and reapproval/reconfirmation after material changes.
+- Atomic server-backed booking-request conversion, including a persisted
+  request-to-trip link. Session-only duplicate prevention is not sufficient.
+- Shared message storage, server participant checks, delivery notifications,
+  paging, and per-person read receipts.
+- Form drafts, reliable retry/idempotency handling, backup restore testing,
+  and verification of email delivery and Google Sheets sync before real rollout.
 - `LIVE_OPERATIONS_CHECKLIST.md`: deployment and go-live gate.
 
 ## Publish The Frontend
